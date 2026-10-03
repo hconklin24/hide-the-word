@@ -12,7 +12,7 @@ const COMPONENTS = [
 ];
 const ICONS = ['settings', 'add', 'playlist_add', 'edit', 'delete', 'arrow_back', 'more_vert', 'play_arrow',
   'menu_book-fill', 'replay', 'arrow_forward', 'download', 'upload', 'cloud_download', 'workspace_premium-fill',
-  'format_list_bulleted', 'skip_previous', 'skip_next'];
+  'format_list_bulleted', 'skip_previous', 'skip_next', 'shield'];
 
 const icons = Object.fromEntries(ICONS.map(name => {
   const svg = readFileSync(`node_modules/@material-symbols/svg-400/rounded/${name}.svg`, 'utf8');

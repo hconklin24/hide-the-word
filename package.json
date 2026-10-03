@@ -5,7 +5,8 @@
   "scripts": {
     "vendor": "node tools/build-vendor.mjs",
     "theme": "esbuild tools/gen-theme.mjs --bundle --platform=node --format=esm --log-level=warning | node --input-type=module > theme.css",
-    "build": "python3 build.py"
+    "build": "python3 build.py",
+    "icons": "node tools/gen-icons.mjs"
   },
   "author": "",
   "license": "ISC",
@@ -13,7 +14,8 @@
     "@material-symbols/svg-400": "^0.47.6",
     "@material/material-color-utilities": "^0.4.0",
     "@material/web": "^2.5.0",
-    "esbuild": "^0.28.2"
+    "esbuild": "^0.28.2",
+    "sharp": "^0.35.5"
   },
   "private": true
 }

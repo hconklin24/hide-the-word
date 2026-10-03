@@ -4,6 +4,7 @@ Inlines theme.css, vendor/material.js (Material Web components) and web.js (WEB 
 Fonts still load from Google Fonts when online and fall back to system fonts offline.
 """
 import re
+from urllib.parse import quote
 from pathlib import Path
 
 root = Path(__file__).parent
@@ -18,6 +19,10 @@ replacements = {
 html, n = re.subn(r'<script type="module" src="vendor/material\.js(\?v=\w+)?"></script>',
                   lambda _: '<script type="module">\n' + read("vendor/material.js") + "</script>", html)
 assert n == 1, "vendor/material.js script tag not found in index.html"
+# Install-to-home-screen links point at separate files; drop them and inline the favicon.
+html = re.sub(r'<link rel="(manifest|apple-touch-icon)"[^>]*>\n', '', html)
+icon_svg = (root / "icons" / "icon.svg").read_text(encoding="utf-8")
+html = html.replace('href="icons/icon.svg"', 'href="data:image/svg+xml,' + quote(icon_svg) + '"')
 for tag, inline in replacements.items():
     assert tag in html, f"{tag} not found in index.html"
     html = html.replace(tag, inline)
