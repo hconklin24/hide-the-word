@@ -1,0 +1,706 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hide the Word</title>
+<style>
+  :root {
+    --bg: #f7f4ee; --panel: #fffdf9; --ink: #2a2622; --muted: #8a8178; --line: #e4ddd2;
+    --accent: #7a4b2a; --accent-ink: #fff; --good: #2f7d4f; --bad: #b3412f; --pending: #c9c0b4;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #1b1916; --panel: #24211d; --ink: #ece6dd; --muted: #9a9086; --line: #3a352f;
+      --accent: #d29a6a; --accent-ink: #1b1916; --good: #6cc48f; --bad: #e57a66; --pending: #5a534b; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 -apple-system, system-ui, sans-serif; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  button { cursor: pointer; border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 6px 12px; }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  button.ghost { border-color: transparent; background: transparent; color: var(--muted); }
+  button:disabled { opacity: .45; cursor: default; }
+  input, select, textarea { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; width: 100%; }
+  textarea { min-height: 110px; resize: vertical; font-family: Georgia, serif; }
+  header { display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-bottom: 1px solid var(--line); background: var(--panel); flex-wrap: wrap; }
+  header h1 { font: 600 20px Georgia, serif; margin: 0; flex: 1; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; padding: 6px 14px; }
+  .seg button.on { background: var(--accent); color: var(--accent-ink); }
+  .layout { display: grid; grid-template-columns: 240px 1fr; min-height: calc(100vh - 58px); }
+  aside { border-right: 1px solid var(--line); padding: 16px; }
+  aside h2, main h2 { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 10px; }
+  .list-item { display: flex; align-items: center; justify-content: space-between; padding: 7px 10px; border-radius: 8px; cursor: pointer; }
+  .list-item.on { background: var(--panel); border: 1px solid var(--line); }
+  .list-item .count { color: var(--muted); font-size: 13px; }
+  .row { display: flex; gap: 8px; align-items: center; }
+  main { padding: 20px 28px; max-width: 900px; width: 100%; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; }
+  .passage { display: flex; gap: 14px; align-items: center; }
+  .passage .ref { font: 600 16px Georgia, serif; }
+  .passage .preview { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .passage .body { flex: 1; min-width: 0; }
+  .badge { font-size: 12px; padding: 2px 8px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+  .badge.good { color: var(--good); border-color: var(--good); }
+  .muted { color: var(--muted); }
+  .title-row { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+  .title-row h3 { font: 600 24px Georgia, serif; margin: 0; flex: 1; }
+  .empty { text-align: center; padding: 40px 10px; color: var(--muted); }
+  label.f { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+  .tabs { display: flex; gap: 4px; margin-top: 10px; }
+  .tabs button { border-radius: 8px 8px 0 0; border-bottom: 0; }
+  .tabs button.on { background: var(--bg); font-weight: 600; }
+  dialog { border: 1px solid var(--line); border-radius: 14px; background: var(--panel); color: var(--ink); width: min(620px, 94vw); padding: 20px; }
+  dialog::backdrop { background: rgba(0,0,0,.35); }
+  .msg { font-size: 13px; margin-top: 6px; min-height: 18px; }
+  .msg.err { color: var(--bad); } .msg.ok { color: var(--good); }
+
+  /* Practice */
+  .practice-text { font: 22px/1.9 Georgia, serif; padding: 22px; min-height: 160px; cursor: text; outline: none; }
+  .w { white-space: nowrap; border-radius: 4px; padding: 0 1px; }
+  .w.pending { color: var(--pending); }
+  .w.correct { color: var(--ink); }
+  .w.ref { font-variant: small-caps; letter-spacing: .03em; }
+  .w.missed { color: var(--bad); text-decoration: underline wavy; text-decoration-thickness: 1px; }
+  .w.current { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
+  .w.shake { animation: shake .25s; background: color-mix(in srgb, var(--bad) 25%, transparent); }
+  @keyframes shake { 25% { transform: translateX(-3px);} 75% { transform: translateX(3px);} }
+  .stats { display: flex; gap: 22px; color: var(--muted); font-size: 14px; flex-wrap: wrap; }
+  .stats b { color: var(--ink); }
+  .controls { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin: 12px 0; }
+  .controls .lbl { font-size: 12px; color: var(--muted); margin-right: 6px; }
+  #catcher { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
+  .done { text-align: center; padding: 10px 0 4px; }
+  .done .big { font: 600 40px Georgia, serif; }
+  .bar { height: 6px; background: var(--line); border-radius: 99px; overflow: hidden; margin-top: 10px; }
+  .bar > div { height: 100%; background: var(--accent); transition: width .15s; }
+
+  main, .passage .body, .row input { min-width: 0; }
+  @media (max-width: 720px) {
+    header { padding: 10px 16px; gap: 8px; }
+    header h1 { font-size: 18px; flex-basis: 100%; }
+    .seg button { padding: 6px 11px; }
+    .layout { grid-template-columns: minmax(0, 1fr); align-content: start; min-height: 0; }
+    aside { border-right: 0; border-bottom: 1px solid var(--line); }
+    main { padding: 16px; }
+    .title-row { flex-wrap: wrap; }
+    .title-row h3 { flex-basis: 100%; font-size: 21px; }
+    .practice-text { font-size: 19px; padding: 14px; }
+    .passage { flex-wrap: wrap; }
+    .passage .body { flex-basis: 100%; }
+    /* iOS zooms the page when focusing inputs smaller than 16px */
+    input, select, textarea, #catcher { font-size: 16px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Hide the Word</h1>
+  <div class="seg" id="versionSeg"></div>
+  <button class="ghost" id="settingsBtn" title="Settings">⚙ Settings</button>
+</header>
+
+<div class="layout">
+  <aside>
+    <h2>My lists</h2>
+    <div id="lists"></div>
+    <div class="row" style="margin-top:10px">
+      <input id="newListName" placeholder="New list name">
+      <button id="addListBtn">Add</button>
+    </div>
+  </aside>
+  <main id="main"></main>
+</div>
+
+<!-- Add / edit passage -->
+<dialog id="passageDlg">
+  <h3 style="margin:0 0 6px;font-family:Georgia,serif" id="passageDlgTitle">Add passage</h3>
+  <label class="f">Reference</label>
+  <input id="refInput" placeholder="e.g. John 3:16-17, Psalm 23, Romans 8:28">
+  <div class="tabs" id="textTabs"></div>
+  <textarea id="textInput" placeholder="Paste the passage text for this version"></textarea>
+  <div class="row" style="justify-content:space-between;margin-top:8px">
+    <button id="fetchBtn">Fetch from API.Bible</button>
+    <span class="msg" id="fetchMsg"></span>
+  </div>
+  <div class="row" style="justify-content:flex-end;margin-top:16px">
+    <button class="ghost" id="passageCancel">Cancel</button>
+    <button class="primary" id="passageSave">Save</button>
+  </div>
+</dialog>
+
+<!-- Bulk add -->
+<dialog id="bulkDlg">
+  <h3 style="margin:0 0 6px;font-family:Georgia,serif">Add many passages</h3>
+  <p class="muted" style="font-size:14px;margin:0">
+    Separate references with commas, semicolons or new lines. Shorthand carries the book and chapter forward:
+    <i>John 3:16, 18, 4:24; Psalm 23, 91</i>.
+  </p>
+  <textarea id="bulkInput" style="font-family:inherit" placeholder="Romans 8:28, Philippians 4:6-7, Joshua 1:9"></textarea>
+  <div class="msg" id="bulkMsg" style="white-space:pre-line"></div>
+  <div class="row" style="justify-content:flex-end;margin-top:16px">
+    <button class="ghost" id="bulkCancel">Close</button>
+    <button class="primary" id="bulkSave">Add to list</button>
+  </div>
+</dialog>
+
+<!-- Settings -->
+<dialog id="settingsDlg">
+  <h3 style="margin:0 0 6px;font-family:Georgia,serif">Settings</h3>
+  <p class="muted" style="font-size:14px;margin:0">
+    The World English Bible (WEB) is built in and works offline. NIV, NASB and NLT are copyrighted,
+    so the app doesn't ship their text. You can paste text per passage,
+    or add a free <a href="https://scripture.api.bible" target="_blank" rel="noopener" style="color:var(--accent)">API.Bible</a>
+    key to fetch passages automatically (only versions your key is licensed for will work).
+  </p>
+  <label class="f">API.Bible key</label>
+  <input id="apiKeyInput" placeholder="Paste your API key">
+  <div class="msg" id="settingsMsg"></div>
+  <label class="f">Backup</label>
+  <div class="row">
+    <button id="exportBtn">Export data</button>
+    <button id="importBtn">Import data</button>
+    <input type="file" id="importFile" accept="application/json" hidden>
+  </div>
+  <div class="row" style="justify-content:flex-end;margin-top:16px">
+    <button class="ghost" id="settingsCancel">Close</button>
+    <button class="primary" id="settingsSave">Save key</button>
+  </div>
+</dialog>
+
+<input id="catcher" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+
+<script src="web.js"></script>
+<script>
+const VERSIONS = ['WEB', 'NIV', 'NASB', 'NLT'];
+const BUNDLED = 'WEB'; // public domain, shipped inside the app
+const STORE_KEY = 'hideTheWord.v1';
+
+// ---------- State ----------
+const uid = () => Math.random().toString(36).slice(2, 10);
+function defaultState() {
+  return { version: 'WEB', apiKey: '', bibleIds: {}, activeListId: null, lists: [],
+           prefs: { mode: 'letter', hint: 'initials', ref: 'off' } };
+}
+let state;
+try { state = Object.assign(defaultState(), JSON.parse(localStorage.getItem(STORE_KEY)) || {}); }
+catch { state = defaultState(); }
+if (!state.lists.length) {
+  const id = uid();
+  state.lists.push({ id, name: 'Favorites', passages: [] });
+  state.activeListId = id;
+}
+state.prefs.ref ||= 'off';
+const save = () => { try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch {} };
+// A passage's text in a version: what the user saved, or the built-in WEB looked up by reference.
+function textFor(p, v) {
+  if (p.texts?.[v]) return p.texts[v];
+  if (v === BUNDLED) { try { return bundledText(p.ref); } catch { return ''; } }
+  return '';
+}
+const activeList = () => state.lists.find(l => l.id === state.activeListId) || state.lists[0];
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+
+// ---------- Rendering: header + sidebar ----------
+function renderVersions() {
+  $('#versionSeg').innerHTML = VERSIONS.map(v =>
+    `<button data-v="${v}" class="${v === state.version ? 'on' : ''}">${v}</button>`).join('');
+}
+$('#versionSeg').onclick = e => {
+  const v = e.target.dataset.v; if (!v) return;
+  state.version = v; save(); renderVersions(); practice ? renderPractice() : renderMain();
+};
+
+function renderLists() {
+  const active = activeList();
+  $('#lists').innerHTML = state.lists.map(l =>
+    `<div class="list-item ${l.id === active.id ? 'on' : ''}" data-id="${l.id}">
+       <span>${esc(l.name)}</span><span class="count">${l.passages.length}</span>
+     </div>`).join('');
+}
+$('#lists').onclick = e => {
+  const el = e.target.closest('.list-item'); if (!el) return;
+  state.activeListId = el.dataset.id; practice = null; save(); renderAll();
+};
+function addList() {
+  const name = $('#newListName').value.trim(); if (!name) return;
+  const id = uid(); state.lists.push({ id, name, passages: [] });
+  state.activeListId = id; $('#newListName').value = ''; practice = null; save(); renderAll();
+}
+$('#addListBtn').onclick = addList;
+$('#newListName').onkeydown = e => { if (e.key === 'Enter') addList(); };
+
+// ---------- Rendering: list view ----------
+function renderMain() {
+  const list = activeList(), v = state.version;
+  const items = list.passages.map(p => {
+    const text = textFor(p, v);
+    const best = p.best?.[v];
+    const badge = !text ? `<span class="badge">No ${v} text</span>`
+      : best != null ? `<span class="badge ${best >= 95 ? 'good' : ''}">Best ${best}%</span>`
+      : `<span class="badge">New</span>`;
+    return `<div class="card passage" data-id="${p.id}">
+      <div class="body">
+        <div class="ref">${esc(p.ref)}</div>
+        <div class="preview">${text ? esc(text) : '<i>Add ' + v + ' text to practice</i>'}</div>
+      </div>
+      ${badge}
+      <button class="primary" data-act="practice" ${text ? '' : 'disabled'}>Practice</button>
+      <button data-act="edit">Edit</button>
+      <button class="ghost" data-act="delete" title="Delete">✕</button>
+    </div>`;
+  }).join('');
+  $('#main').innerHTML = `
+    <div class="title-row">
+      <h3>${esc(list.name)}</h3>
+      <button class="ghost" id="renameList">Rename</button>
+      <button class="ghost" id="deleteList">Delete list</button>
+      <button id="bulkAdd">Add many</button>
+      <button class="primary" id="addPassage">+ Add passage</button>
+    </div>
+    ${items || `<div class="empty">No passages yet. Add one to start memorizing.</div>`}`;
+  $('#addPassage').onclick = () => openPassageDlg(null);
+  $('#bulkAdd').onclick = openBulkDlg;
+  $('#renameList').onclick = () => {
+    const name = prompt('Rename list', list.name);
+    if (name && name.trim()) { list.name = name.trim(); save(); renderAll(); }
+  };
+  $('#deleteList').onclick = () => {
+    if (!confirm(`Delete "${list.name}" and its ${list.passages.length} passage(s)?`)) return;
+    state.lists = state.lists.filter(l => l.id !== list.id);
+    if (!state.lists.length) state.lists.push({ id: uid(), name: 'Favorites', passages: [] });
+    state.activeListId = state.lists[0].id; save(); renderAll();
+  };
+}
+$('#main').addEventListener('click', e => {
+  const btn = e.target.closest('button[data-act]'); if (!btn) return;
+  const id = btn.closest('.passage').dataset.id;
+  const list = activeList(), p = list.passages.find(x => x.id === id);
+  if (btn.dataset.act === 'practice') startPractice(p);
+  if (btn.dataset.act === 'edit') openPassageDlg(p);
+  if (btn.dataset.act === 'delete' && confirm(`Remove ${p.ref}?`)) {
+    list.passages = list.passages.filter(x => x.id !== id); save(); renderAll();
+  }
+});
+
+function renderAll() { renderVersions(); renderLists(); practice ? renderPractice() : renderMain(); }
+
+// ---------- Add / edit passage dialog ----------
+let editing = null, draftTexts = {}, draftVersion = 'NIV';
+function openPassageDlg(p) {
+  editing = p;
+  draftTexts = Object.assign({}, p?.texts || {});
+  draftVersion = state.version;
+  $('#passageDlgTitle').textContent = p ? 'Edit passage' : 'Add passage';
+  $('#refInput').value = p?.ref || '';
+  $('#fetchMsg').textContent = ''; $('#fetchMsg').className = 'msg';
+  renderTextTabs();
+  $('#passageDlg').showModal();
+  (p ? $('#textInput') : $('#refInput')).focus();
+}
+function renderTextTabs() {
+  $('#textTabs').innerHTML = VERSIONS.map(v =>
+    `<button data-v="${v}" class="${v === draftVersion ? 'on' : ''}">${v}${draftTexts[v] ? ' ✓' : ''}</button>`).join('');
+  $('#textInput').value = draftTexts[draftVersion] || '';
+  $('#textInput').placeholder = `Paste the ${draftVersion} text for this passage`;
+  $('#fetchBtn').textContent = draftVersion === BUNDLED ? `Load ${BUNDLED} text` : `Fetch ${draftVersion} from API.Bible`;
+}
+$('#textTabs').onclick = e => {
+  const v = e.target.dataset.v; if (!v) return;
+  draftTexts[draftVersion] = $('#textInput').value.trim();
+  draftVersion = v; renderTextTabs();
+};
+$('#refInput').addEventListener('change', () => {
+  if (draftVersion !== BUNDLED) return;
+  try { draftTexts[BUNDLED] = bundledText($('#refInput').value); renderTextTabs(); setMsg('#fetchMsg', '', ''); }
+  catch (err) { setMsg('#fetchMsg', err.message, 'err'); }
+});
+// ---------- Bulk add ----------
+// Expand "John 3:16, 18, 4:24" into full references, carrying the previous book/chapter forward.
+function splitRefs(input) {
+  const out = [];
+  let prev = null; // last successfully parsed ref
+  for (const raw of input.split(/[,;\n]+/)) {
+    const piece = raw.trim().replace(/\s+/g, ' ');
+    if (!piece) continue;
+    let full = piece;
+    if (prev && /^\d+\s*:/.test(piece)) full = `${prev.book} ${piece}`;
+    else if (prev && /^\d+(\s*[-–]\s*\d+)?$/.test(piece)) full = prev.v1 ? `${prev.book} ${prev.ch2}:${piece}` : `${prev.book} ${piece}`;
+    try { prev = parseRef(full); out.push({ ref: full }); }
+    catch (err) { out.push({ ref: full, error: err.message }); }
+  }
+  return out;
+}
+function openBulkDlg() {
+  $('#bulkInput').value = ''; setMsg('#bulkMsg', '', '');
+  $('#bulkDlg').showModal(); $('#bulkInput').focus();
+}
+$('#bulkCancel').onclick = () => $('#bulkDlg').close();
+$('#bulkSave').onclick = () => {
+  const list = activeList();
+  const refKey = ref => { try { return apiPassageId(parseRef(ref)); } catch { return ref.toLowerCase(); } };
+  const existing = new Set(list.passages.map(p => refKey(p.ref)));
+  const failed = [], skipped = [];
+  let added = 0;
+  for (const { ref, error } of splitRefs($('#bulkInput').value)) {
+    let err = error;
+    if (!err) try { bundledText(ref); } catch (e) { err = e.message; }
+    if (err) { failed.push({ ref, err }); continue; }
+    if (existing.has(refKey(ref))) { skipped.push(ref); continue; }
+    existing.add(refKey(ref));
+    list.passages.push({ id: uid(), ref, texts: {}, best: {} });
+    added++;
+  }
+  if (added) { save(); renderAll(); }
+  const lines = [`Added ${added} passage${added === 1 ? '' : 's'}.`];
+  if (skipped.length) lines.push(`Already in list: ${skipped.join(', ')}`);
+  failed.forEach(f => lines.push(`✕ ${f.err}`));
+  setMsg('#bulkMsg', lines.join('\n'), failed.length ? 'err' : 'ok');
+  // Leave only the failures in the box so they can be fixed and re-submitted.
+  $('#bulkInput').value = failed.map(f => f.ref).join(', ');
+  if (!failed.length && !skipped.length) $('#bulkDlg').close();
+};
+
+$('#passageCancel').onclick = () => $('#passageDlg').close();
+$('#passageSave').onclick = () => {
+  draftTexts[draftVersion] = $('#textInput').value.trim();
+  const ref = $('#refInput').value.trim();
+  if (!ref) { setMsg('#fetchMsg', 'Enter a reference.', 'err'); return; }
+  try { if (draftTexts[BUNDLED] === bundledText(ref)) delete draftTexts[BUNDLED]; } catch {}
+  for (const v of VERSIONS) if (!draftTexts[v]) delete draftTexts[v];
+  if (editing) {
+    for (const v of VERSIONS) if (textFor(editing, v) !== textFor({ ref, texts: draftTexts }, v)) delete (editing.best ||= {})[v];
+    editing.ref = ref; editing.texts = draftTexts;
+  } else {
+    activeList().passages.push({ id: uid(), ref, texts: draftTexts, best: {} });
+  }
+  save(); $('#passageDlg').close(); renderAll();
+};
+$('#fetchBtn').onclick = async () => {
+  const ref = $('#refInput').value.trim();
+  if (draftVersion === BUNDLED) {
+    try { draftTexts[BUNDLED] = bundledText(ref); renderTextTabs(); setMsg('#fetchMsg', `Loaded ${BUNDLED}.`, 'ok'); }
+    catch (err) { setMsg('#fetchMsg', err.message, 'err'); }
+    return;
+  }
+  if (!state.apiKey) { setMsg('#fetchMsg', 'Add an API.Bible key in Settings first, or paste the text.', 'err'); return; }
+  if (!ref) { setMsg('#fetchMsg', 'Enter a reference first.', 'err'); return; }
+  const v = draftVersion;
+  setMsg('#fetchMsg', 'Fetching…', '');
+  try {
+    const text = await fetchPassage(ref, v);
+    draftTexts[v] = text;
+    if (draftVersion === v) $('#textInput').value = text;
+    renderTextTabs();
+    setMsg('#fetchMsg', `Loaded ${v}.`, 'ok');
+  } catch (err) { setMsg('#fetchMsg', err.message, 'err'); }
+};
+function setMsg(sel, text, cls) { const el = $(sel); el.textContent = text; el.className = 'msg ' + cls; }
+
+// ---------- API.Bible ----------
+const BOOKS = [
+  ['GEN','genesis gen ge gn'],['EXO','exodus exod ex'],['LEV','leviticus lev lv'],['NUM','numbers num nm'],
+  ['DEU','deuteronomy deut dt'],['JOS','joshua josh jos'],['JDG','judges judg jdg'],['RUT','ruth ru'],
+  ['1SA','1samuel 1sam 1sa'],['2SA','2samuel 2sam 2sa'],['1KI','1kings 1kgs 1ki'],['2KI','2kings 2kgs 2ki'],
+  ['1CH','1chronicles 1chron 1chr 1ch'],['2CH','2chronicles 2chron 2chr 2ch'],['EZR','ezra ezr'],['NEH','nehemiah neh'],
+  ['EST','esther est'],['JOB','job jb'],['PSA','psalms psalm ps psa pss'],['PRO','proverbs prov pr prv'],
+  ['ECC','ecclesiastes eccl ecc qoh'],['SNG','songofsolomon songofsongs song sos ss'],['ISA','isaiah isa is'],
+  ['JER','jeremiah jer'],['LAM','lamentations lam'],['EZK','ezekiel ezek ezk'],['DAN','daniel dan dn'],
+  ['HOS','hosea hos'],['JOL','joel jl'],['AMO','amos am'],['OBA','obadiah obad ob'],['JON','jonah jon'],
+  ['MIC','micah mic'],['NAM','nahum nah'],['HAB','habakkuk hab'],['ZEP','zephaniah zeph zep'],
+  ['HAG','haggai hag'],['ZEC','zechariah zech zec'],['MAL','malachi mal'],
+  ['MAT','matthew matt mt'],['MRK','mark mk mrk'],['LUK','luke lk luk'],['JHN','john jn jhn'],['ACT','acts ac'],
+  ['ROM','romans rom ro'],['1CO','1corinthians 1cor 1co'],['2CO','2corinthians 2cor 2co'],['GAL','galatians gal'],
+  ['EPH','ephesians eph'],['PHP','philippians phil php'],['COL','colossians col'],
+  ['1TH','1thessalonians 1thess 1th'],['2TH','2thessalonians 2thess 2th'],['1TI','1timothy 1tim 1ti'],
+  ['2TI','2timothy 2tim 2ti'],['TIT','titus tit'],['PHM','philemon phlm phm'],['HEB','hebrews heb'],
+  ['JAS','james jas jm'],['1PE','1peter 1pet 1pe'],['2PE','2peter 2pet 2pe'],['1JN','1john 1jn 1jo'],
+  ['2JN','2john 2jn 2jo'],['3JN','3john 3jn 3jo'],['JUD','jude jud'],['REV','revelation rev re'],
+];
+const BOOK_NAMES = ('Genesis|Exodus|Leviticus|Numbers|Deuteronomy|Joshua|Judges|Ruth|1 Samuel|2 Samuel|1 Kings|2 Kings|' +
+  '1 Chronicles|2 Chronicles|Ezra|Nehemiah|Esther|Job|Psalm|Proverbs|Ecclesiastes|Song of Solomon|Isaiah|Jeremiah|' +
+  'Lamentations|Ezekiel|Daniel|Hosea|Joel|Amos|Obadiah|Jonah|Micah|Nahum|Habakkuk|Zephaniah|Haggai|Zechariah|Malachi|' +
+  'Matthew|Mark|Luke|John|Acts|Romans|1 Corinthians|2 Corinthians|Galatians|Ephesians|Philippians|Colossians|' +
+  '1 Thessalonians|2 Thessalonians|1 Timothy|2 Timothy|Titus|Philemon|Hebrews|James|1 Peter|2 Peter|1 John|2 John|' +
+  '3 John|Jude|Revelation').split('|');
+// "rom 8:38-9:2" -> "Romans 8:38-9:2"; falls back to the text as written.
+function formatRef(ref) {
+  try {
+    const r = parseRef(ref), name = BOOK_NAMES[BOOKS.findIndex(b => b[0] === r.code)];
+    if (!r.v1) return `${name} ${r.ch}`;
+    if (r.ch2 !== r.ch) return `${name} ${r.ch}:${r.v1}-${r.ch2}:${r.v2}`;
+    return `${name} ${r.ch}:${r.v1}` + (r.v2 !== r.v1 ? `-${r.v2}` : '');
+  } catch { return ref.trim(); }
+}
+const BOOK_LOOKUP = {};
+for (const [code, names] of BOOKS) for (const n of names.split(' ')) BOOK_LOOKUP[n] = code;
+
+function parseRef(ref) {
+  const m = ref.trim().replace(/^(first|i)\s/i, '1 ').replace(/^(second|ii)\s/i, '2 ').replace(/^(third|iii)\s/i, '3 ')
+    .match(/^([1-3]?\s*[a-z][a-z .]*?)\.?\s*(\d+)(?:\s*:\s*(\d+)(?:\s*[-–]\s*(?:(\d+)\s*:\s*)?(\d+))?)?$/i);
+  if (!m) throw new Error(`Couldn't read "${ref}". Try a format like "John 3:16-17".`);
+  const key = m[1].toLowerCase().replace(/[\s.]/g, '').replace(/^(songofsolomon|songofsongs)$/, 'song');
+  const code = BOOK_LOOKUP[key];
+  if (!code) throw new Error(`Unknown book "${m[1].trim()}".`);
+  const [ch, v1, ch2, v2] = [m[2], m[3], m[4], m[5]].map(x => x && +x);
+  return { book: m[1].trim(), code, ch, v1, ch2: v2 ? (ch2 || ch) : ch, v2: v2 || v1 };
+}
+function apiPassageId({ code, ch, v1, ch2, v2 }) {
+  if (!v1) return `${code}.${ch}`;
+  return `${code}.${ch}.${v1}` + (ch2 !== ch || v2 !== v1 ? `-${code}.${ch2}.${v2}` : '');
+}
+function bundledText(ref) {
+  const r = parseRef(ref), book = window.WEB_BIBLE?.[r.code];
+  if (!book) throw new Error('Built-in WEB text is missing.');
+  const out = [];
+  for (let c = r.ch; c <= r.ch2; c++) {
+    const verses = book[c - 1];
+    if (!verses) throw new Error(`${ref.trim()}: chapter ${c} doesn't exist.`);
+    const from = c === r.ch && r.v1 ? r.v1 : 1, to = c === r.ch2 && r.v2 ? r.v2 : verses.length;
+    if (from > verses.length) throw new Error(`${ref.trim()}: verse ${from} doesn't exist.`);
+    for (let v = from; v <= Math.min(to, verses.length); v++) if (verses[v - 1]) out.push(verses[v - 1]);
+  }
+  if (!out.length) throw new Error(`No text found for ${ref.trim()}.`);
+  return out.join(' ');
+}
+
+async function apiGet(path) {
+  const res = await fetch('https://api.scripture.api.bible/v1' + path, { headers: { 'api-key': state.apiKey } });
+  if (res.status === 401) throw new Error('API key was rejected.');
+  if (res.status === 403) throw new Error('Your API key isn\'t licensed for this version — paste the text instead.');
+  if (res.status === 404) throw new Error('Passage not found in this version.');
+  if (!res.ok) throw new Error(`API.Bible error ${res.status}.`);
+  return (await res.json()).data;
+}
+async function bibleIdFor(version) {
+  if (state.bibleIds[version]) return state.bibleIds[version];
+  const bibles = await apiGet('/bibles?language=eng');
+  const want = version.toLowerCase();
+  const hit = bibles.find(b => [b.abbreviation, b.abbreviationLocal].some(a => (a || '').toLowerCase() === want))
+    || bibles.find(b => [b.abbreviation, b.abbreviationLocal].some(a => (a || '').toLowerCase().startsWith(want)));
+  if (!hit) throw new Error(`${version} isn't available with your API.Bible key — paste the text instead.`);
+  state.bibleIds[version] = hit.id; save();
+  return hit.id;
+}
+async function fetchPassage(ref, version) {
+  const passageId = apiPassageId(parseRef(ref));
+  const id = await bibleIdFor(version);
+  const q = 'content-type=text&include-notes=false&include-titles=false&include-chapter-numbers=false&include-verse-numbers=false&include-verse-spans=false';
+  const data = await apiGet(`/bibles/${id}/passages/${encodeURIComponent(passageId)}?${q}`);
+  return cleanText(data.content);
+}
+const cleanText = t => t.replace(/¶/g, '').replace(/\[\d+\]/g, '').replace(/\s+/g, ' ').trim();
+
+// ---------- Settings ----------
+$('#settingsBtn').onclick = () => {
+  $('#apiKeyInput').value = state.apiKey; setMsg('#settingsMsg', '', ''); $('#settingsDlg').showModal();
+};
+$('#settingsCancel').onclick = () => $('#settingsDlg').close();
+$('#settingsSave').onclick = () => {
+  const key = $('#apiKeyInput').value.trim();
+  if (key !== state.apiKey) state.bibleIds = {};
+  state.apiKey = key; save(); setMsg('#settingsMsg', 'Saved.', 'ok');
+};
+$('#exportBtn').onclick = () => {
+  const data = JSON.stringify({ lists: state.lists }, null, 2);
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([data], { type: 'application/json' }));
+  a.download = 'scripture-lists.json'; a.click();
+};
+$('#importBtn').onclick = () => $('#importFile').click();
+$('#importFile').onchange = async e => {
+  const file = e.target.files[0]; if (!file) return;
+  try {
+    const data = JSON.parse(await file.text());
+    if (!Array.isArray(data.lists)) throw new Error();
+    if (!confirm(`Import ${data.lists.length} list(s)? They'll be added alongside your current lists.`)) return;
+    for (const l of data.lists) state.lists.push({ ...l, id: uid() });
+    save(); renderAll(); setMsg('#settingsMsg', 'Imported.', 'ok');
+  } catch { setMsg('#settingsMsg', 'That file isn\'t a valid backup.', 'err'); }
+  e.target.value = '';
+};
+
+// ---------- Practice ----------
+// Modes: 'letter' = type the first letter of each word; 'word' = type each full word then space.
+// Hints: 'show' = full text faded; 'initials' = first letters only; 'hidden' = blanks.
+// Reference: 'off' | 'start' | 'both' — the reference is typed as part of the passage.
+let practice = null;
+const norm = w => w.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
+
+function startPractice(p) {
+  const body = textFor(p, state.version).split(/\s+/).filter(w => norm(w));
+  const ref = formatRef(p.ref).split(' '), mode = state.prefs.ref;
+  const words = [...(mode !== 'off' ? ref : []), ...body, ...(mode === 'both' ? ref : [])];
+  const isRef = words.map((_, k) => mode !== 'off' && (k < ref.length || (mode === 'both' && k >= ref.length + body.length)));
+  practice = { passage: p, version: state.version, words, isRef, i: 0, keyPos: 0,
+    status: words.map(() => 'pending'), tries: 0, errors: 0, typed: '', start: null, end: null };
+  renderPractice();
+}
+
+// Keys to press for a word in first-letter mode: chapter/verse numbers need every digit.
+const letterKeys = (P, k) => P.isRef[k] && /\d/.test(P.words[k]) ? norm(P.words[k]) : norm(P.words[k])[0];
+
+// revealed = how many letters/digits have already been typed (shown regardless of hint).
+function maskWord(w, hint, revealed = 0) {
+  if (hint === 'show') return esc(w);
+  const first = w.search(/[a-z0-9]/i);
+  let n = 0;
+  return [...w].map((c, k) => {
+    if (!/[a-z0-9]/i.test(c)) return esc(c);
+    return n++ < revealed || (hint === 'initials' && k === first) ? esc(c) : '_';
+  }).join('');
+}
+
+function renderPractice() {
+  const P = practice, prefs = state.prefs;
+  if (P.version !== state.version) {
+    if (!textFor(P.passage, state.version)) { practice = null; return renderMain(); }
+    return startPractice(P.passage);
+  }
+  const done = P.i >= P.words.length;
+  const wordsHtml = P.words.map((w, k) => {
+    const st = k === P.i ? 'current' : P.status[k];
+    const shown = (st === 'correct' || st === 'missed') ? esc(w) : maskWord(w, prefs.hint, k === P.i ? P.keyPos : 0);
+    const typed = k === P.i && prefs.mode === 'word' && P.typed ? `<span style="opacity:.8">${esc(P.typed)}</span>` : '';
+    // Put the reference on its own line, apart from the passage text.
+    const brBefore = k > 0 && P.isRef[k] && !P.isRef[k - 1] ? '<br>' : '';
+    const brAfter = k < P.words.length - 1 && P.isRef[k] && !P.isRef[k + 1] ? '<br>' : '';
+    return `${brBefore}<span class="w ${st}${P.isRef[k] ? ' ref' : ''}" data-k="${k}">${typed || shown}</span>${brAfter}`;
+  }).join(' ');
+  const hideTitle = prefs.ref !== 'off' && !done;
+  const correct = P.status.filter(s => s === 'correct').length;
+  const acc = P.i ? Math.round(100 * correct / P.i) : 100;
+  const secs = P.start ? Math.round(((P.end || Date.now()) - P.start) / 1000) : 0;
+  const best = P.passage.best?.[P.version];
+
+  const seg = (name, opts) => `<span><span class="lbl">${name}</span><span class="seg">${opts.map(([k, v, label]) =>
+    `<button data-pref="${k}" data-val="${v}" class="${prefs[k] === v ? 'on' : ''}">${label}</button>`).join('')}</span></span>`;
+
+  $('#main').innerHTML = `
+    <div class="title-row">
+      <button class="ghost" id="backBtn">← ${esc(activeList().name)}</button>
+      <h3>${hideTitle ? '<span class="muted">Reference hidden</span>' : esc(formatRef(P.passage.ref))} <span class="muted" style="font-size:16px">${P.version}</span></h3>
+    </div>
+    <div class="controls">
+      ${seg('Type', [['mode','letter','First letters'],['mode','word','Whole words']])}
+      ${seg('Hints', [['hint','show','Full text'],['hint','initials','Initials'],['hint','hidden','None']])}
+      ${seg('Reference', [['ref','off','Off'],['ref','start','Before'],['ref','both','Before & after']])}
+    </div>
+    <div class="card">
+      <div class="practice-text" id="practiceText" tabindex="0">${wordsHtml}</div>
+      <div class="bar"><div style="width:${100 * P.i / P.words.length}%"></div></div>
+    </div>
+    <div class="stats">
+      <span>Progress <b>${P.i}/${P.words.length}</b></span>
+      <span>Accuracy <b>${acc}%</b></span>
+      <span>Time <b>${secs}s</b></span>
+      ${best != null ? `<span>Best <b>${best}%</b></span>` : ''}
+    </div>
+    ${done ? `<div class="card done">
+        <div class="big">${acc}%</div>
+        <div class="muted">${correct} of ${P.words.length} words correct in ${secs}s${acc === 100 ? ' — perfect!' : ''}</div>
+        <div class="row" style="justify-content:center;margin-top:14px">
+          <button class="primary" id="againBtn">Practice again</button>
+          ${nextPassage() ? `<button id="nextBtn">Next passage →</button>` : ''}
+        </div>
+      </div>` : `<p class="muted" style="font-size:13px">${prefs.mode === 'letter'
+        ? 'Type the first letter of each word' + (prefs.ref !== 'off' ? ', and every digit of the chapter and verse' : '') + '. Two misses reveals the word.'
+        : 'Type each word and press space. Punctuation and capitalization don\'t matter.'} Click the passage if typing stops responding.</p>`}`;
+
+  $('#backBtn').onclick = () => { practice = null; renderMain(); };
+  document.querySelectorAll('[data-pref]').forEach(b => b.onclick = () => {
+    state.prefs[b.dataset.pref] = b.dataset.val; save();
+    if (b.dataset.pref === 'hint') renderPractice(); else startPractice(P.passage);
+  });
+  $('#practiceText').onclick = focusCatcher;
+  if (done) {
+    $('#againBtn').onclick = () => startPractice(P.passage);
+    const nx = nextPassage(); if (nx) $('#nextBtn').onclick = () => startPractice(nx);
+  } else focusCatcher();
+}
+
+function nextPassage() {
+  const ps = activeList().passages.filter(p => textFor(p, state.version));
+  const k = ps.findIndex(p => p.id === practice.passage.id);
+  return ps[k + 1] || null;
+}
+
+function focusCatcher() { const c = $('#catcher'); c.value = ''; c.focus({ preventScroll: true }); }
+
+function finishIfDone() {
+  const P = practice;
+  if (P.i < P.words.length) return;
+  P.end = Date.now();
+  const acc = Math.round(100 * P.status.filter(s => s === 'correct').length / P.words.length);
+  const best = P.passage.best ||= {};
+  if (best[P.version] == null || acc > best[P.version]) best[P.version] = acc;
+  save();
+}
+
+function shakeCurrent() {
+  const el = document.querySelector(`.w[data-k="${practice.i}"]`);
+  if (!el) return;
+  el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake');
+}
+
+function handleLetter(ch) {
+  const P = practice, keys = letterKeys(P, P.i);
+  if (norm(ch) === keys[P.keyPos]) {
+    if (++P.keyPos < keys.length) return renderPractice();
+    P.status[P.i] = P.tries ? 'missed' : 'correct'; P.i++; P.tries = 0; P.keyPos = 0;
+  } else {
+    P.tries++; P.errors++;
+    if (P.tries >= 2) { P.status[P.i] = 'missed'; P.i++; P.tries = 0; P.keyPos = 0; }
+    else return shakeCurrent();
+  }
+  finishIfDone(); renderPractice();
+}
+
+function handleWordInput(value) {
+  const P = practice;
+  if (/\s$/.test(value)) {
+    const attempt = value.trim();
+    if (!attempt) { $('#catcher').value = ''; return; }
+    P.status[P.i] = norm(attempt) === norm(P.words[P.i]) ? 'correct' : 'missed';
+    if (P.status[P.i] === 'missed') P.errors++;
+    P.i++; P.typed = ''; $('#catcher').value = '';
+    finishIfDone(); renderPractice();
+  } else {
+    P.typed = value;
+    const el = document.querySelector(`.w[data-k="${P.i}"]`);
+    if (el) el.innerHTML = value ? `<span style="opacity:.8">${esc(value)}</span>` : maskWord(P.words[P.i], state.prefs.hint);
+  }
+}
+
+$('#catcher').addEventListener('input', e => {
+  const P = practice;
+  if (!P || P.i >= P.words.length) { e.target.value = ''; return; }
+  if (!P.start) P.start = Date.now();
+  if (state.prefs.mode === 'letter') {
+    const chars = e.target.value; e.target.value = '';
+    for (const ch of chars) {
+      if (!practice || practice.i >= practice.words.length) break;
+      if (/[a-z0-9]/i.test(ch)) handleLetter(ch);
+    }
+  } else handleWordInput(e.target.value);
+});
+$('#catcher').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && practice && state.prefs.mode === 'word') {
+    e.preventDefault(); handleWordInput($('#catcher').value + ' ');
+  }
+});
+// Keep typing focus during practice when clicking around the page.
+document.addEventListener('keydown', e => {
+  if (practice && document.activeElement === document.body && e.key.length === 1 && !e.metaKey && !e.ctrlKey) focusCatcher();
+});
+setInterval(() => { if (practice?.start && !practice.end) {
+  const t = document.querySelector('.stats span:nth-child(3) b');
+  if (t) t.textContent = Math.round((Date.now() - practice.start) / 1000) + 's';
+} }, 1000);
+
+renderAll();
+</script>
+</body>
+</html>
