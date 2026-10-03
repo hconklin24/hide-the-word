@@ -70,6 +70,7 @@
   .meta { font-size: 12px; color: var(--md-sys-color-on-surface-variant); }
   .today-stats { margin: 0 4px 20px; }
   .result-msg { margin-top: 10px; font-weight: 500; }
+  .phrase-gap { display: block; height: 10px; }
   .caught-up md-icon { color: var(--md-sys-color-tertiary); }
   .passage .ref { font: 600 16px/24px var(--scripture); }
   .passage .preview { color: var(--md-sys-color-on-surface-variant); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -280,7 +281,7 @@ const STORE_KEY = 'hideTheWord.v1';
 const uid = () => Math.random().toString(36).slice(2, 10);
 function defaultState() {
   return { schema: 2, version: 'WEB', apiKey: '', bibleIds: {}, activeListId: null, lists: [], view: 'today',
-           newPerDay: 2, daily: null, prefs: { mode: 'letter', hint: 'auto', ref: 'off' } };
+           newPerDay: 2, daily: null, prefs: { mode: 'letter', hint: 'auto', ref: 'off', approach: 'auto' } };
 }
 let state, saved = null;
 try { saved = JSON.parse(localStorage.getItem(STORE_KEY)); } catch {}
@@ -291,6 +292,7 @@ if (!state.lists.length) {
   state.activeListId = id;
 }
 state.prefs.ref ||= 'off';
+state.prefs.approach ||= 'auto';
 if (saved && (saved.schema || 1) < 2) { state.prefs.hint = 'auto'; state.schema = 2; } // hints now fade automatically
 const save = () => { try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch {} };
 // A passage's text in a version: what the user saved, or the built-in WEB looked up by reference.
@@ -722,7 +724,9 @@ function apiPassageId({ code, ch, v1, ch2, v2 }) {
   if (!v1) return `${code}.${ch}`;
   return `${code}.${ch}.${v1}` + (ch2 !== ch || v2 !== v1 ? `-${code}.${ch2}.${v2}` : '');
 }
-function bundledText(ref) {
+const bundledText = ref => bundledVerses(ref).join(' ');
+// The WEB text of a reference as an array of verses.
+function bundledVerses(ref) {
   const r = parseRef(ref), book = window.WEB_BIBLE?.[r.code];
   if (!book) throw new Error('Built-in WEB text is missing.');
   const out = [];
@@ -734,7 +738,7 @@ function bundledText(ref) {
     for (let v = from; v <= Math.min(to, verses.length); v++) if (verses[v - 1]) out.push(verses[v - 1]);
   }
   if (!out.length) throw new Error(`No text found for ${ref.trim()}.`);
-  return out.join(' ');
+  return out;
 }
 
 async function apiGet(path) {
@@ -803,19 +807,97 @@ $('#importFile').onchange = async e => {
 // Modes: 'letter' = type the first letter of each word; 'word' = type each full word then space.
 // Hints: 'auto' = by the passage's level; 'show' = full text faded; 'initials' = first letters only; 'hidden' = blanks.
 // Reference: 'off' | 'start' | 'both' — the reference is typed as part of the passage.
+// Approach: 'auto' | 'whole' | 'build' — build-up learns a passage chunk by chunk (1, then 1-2, then 1-3...).
+// A run can also be a re-drill: just the phrases around words missed in the previous run.
 let practice = null;
 const norm = w => w.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
 
-// ctx says where the run was started (a list, or the Today review queue) for back/previous/next.
-function startPractice(p, ctx = practice?.ctx || { kind: 'list', listId: findPassage(p.id)?.list.id }) {
+const MIN_CHUNK = 5, MAX_CHUNK = 25, BUILD_MIN_CHUNKS = 3, DRILL_PAD = 2;
+
+// Where each chunk of the passage body ends (cumulative word counts): WEB verses when the text is the
+// built-in WEB, otherwise sentences (long ones also split at commas). Tiny chunks merge into a neighbor.
+function chunkEnds(p, body) {
+  let sizes = null;
+  if (state.version === BUNDLED && !p.texts?.[BUNDLED]) {
+    try { sizes = bundledVerses(p.ref).map(t => t.split(/\s+/).filter(w => norm(w)).length); } catch {}
+    if (sizes && sizes.reduce((a, b) => a + b, 0) !== body.length) sizes = null;
+  }
+  if (!sizes) {
+    sizes = []; let n = 0;
+    body.forEach((w, k) => {
+      n++;
+      if (/[.!?;:]["'”’)]*$/.test(w) || (n >= MAX_CHUNK && /,["'”’]*$/.test(w)) || k === body.length - 1) { sizes.push(n); n = 0; }
+    });
+  }
+  const merged = [];
+  for (const n of sizes) { if (merged.length && merged[merged.length - 1] < MIN_CHUNK) merged[merged.length - 1] += n; else merged.push(n); }
+  if (merged.length > 1 && merged[merged.length - 1] < MIN_CHUNK) merged[merged.length - 2] += merged.pop();
+  let total = 0;
+  return merged.length ? merged.map(n => total += n) : [body.length];
+}
+
+// The passage as practice words (with the reference per the Reference setting) plus build-up step ends.
+function passageWords(p) {
+  const mode = state.prefs.ref;
   const body = textFor(p, state.version).split(/\s+/).filter(w => norm(w));
-  const ref = formatRef(p.ref).split(' '), mode = state.prefs.ref;
-  const words = [...(mode !== 'off' ? ref : []), ...body, ...(mode === 'both' ? ref : [])];
-  const isRef = words.map((_, k) => mode !== 'off' && (k < ref.length || (mode === 'both' && k >= ref.length + body.length)));
+  const ref = formatRef(p.ref).split(' ');
+  const lead = mode !== 'off' ? ref : [], tail = mode === 'both' ? ref : [];
+  const words = [...lead, ...body, ...tail];
+  const isRef = words.map((_, k) => k < lead.length || k >= lead.length + body.length);
+  const ends = chunkEnds(p, body).map(e => lead.length + e);
+  ends[ends.length - 1] = words.length; // the last step includes a trailing reference
+  return { words, isRef, ends };
+}
+
+function useBuildUp(p, ends) {
+  const pref = state.prefs.approach;
+  if (ends.length < 2 || pref === 'whole') return false;
+  return pref === 'build' || (ends.length >= BUILD_MIN_CHUNKS && (srsOf(p)?.level ?? 0) === 0);
+}
+
+// ctx says where the run was started (a list, or the Today review queue) for back/previous/next.
+function startPractice(p, ctx = practice?.ctx || { kind: 'list', listId: findPassage(p.id)?.list.id }, { step = 0 } = {}) {
+  const all = passageWords(p);
+  const build = useBuildUp(p, all.ends) ? { step, ends: all.ends } : null;
+  const n = build ? build.ends[step] : all.words.length;
   const hint = state.prefs.hint === 'auto' ? LEVEL_HINT[srsOf(p)?.level ?? 0] : state.prefs.hint;
-  practice = { passage: p, version: state.version, ctx, hint, words, isRef, i: 0, keyPos: 0, result: null,
-    status: words.map(() => 'pending'), tries: 0, errors: 0, typed: '', start: null, end: null };
+  beginRun({ passage: p, version: state.version, ctx, hint, chunks: all.ends.length, build, drill: null, gaps: null,
+    words: all.words.slice(0, n), isRef: all.isRef.slice(0, n) });
+}
+
+// The fixed parts of a run, so it can be restarted exactly (same step, same drill phrases).
+const runBase = P => ({ passage: P.passage, version: P.version, ctx: P.ctx, hint: P.hint, chunks: P.chunks,
+  build: P.build, drill: P.drill, gaps: P.gaps, words: P.words, isRef: P.isRef });
+
+function beginRun(base) {
+  practice = { ...base, i: 0, keyPos: 0, result: null, status: base.words.map(() => 'pending'),
+    tries: 0, errors: 0, typed: '', start: null, end: null };
   renderPractice();
+}
+
+// Word ranges around each missed word, merged when they overlap, never crossing a drill phrase boundary.
+function missedPhrases(P) {
+  const gaps = [...(P.gaps || [])];
+  const segStart = k => Math.max(0, ...gaps.filter(g => g <= k));
+  const segEnd = k => Math.min(P.words.length, ...gaps.filter(g => g > k));
+  const ranges = [];
+  P.status.forEach((st, k) => {
+    if (st !== 'missed') return;
+    const a = Math.max(segStart(k), k - DRILL_PAD), b = Math.min(segEnd(k), k + DRILL_PAD + 1);
+    const last = ranges[ranges.length - 1];
+    if (last && a <= last[1] && segStart(a) === segStart(last[0])) last[1] = Math.max(last[1], b);
+    else ranges.push([a, b]);
+  });
+  return ranges;
+}
+
+function startDrill(P) {
+  const words = [], isRef = [], gaps = new Set();
+  missedPhrases(P).forEach(([a, b], r) => {
+    if (r) gaps.add(words.length);
+    for (let k = a; k < b; k++) { words.push(P.words[k]); isRef.push(P.isRef[k]); }
+  });
+  beginRun({ ...runBase(P), drill: { from: P.drill?.from || runBase(P), phrases: gaps.size + 1 }, gaps, words, isRef });
 }
 
 // Keys to press for a word in first-letter mode: chapter/verse numbers need every digit.
@@ -844,11 +926,15 @@ function renderPractice() {
     : esc(state.lists.find(l => l.id === P.ctx.listId)?.name || '');
   const s = srsOf(P.passage);
   const hintLabel = prefs.hint === 'auto' ? `Hints · Auto: ${HINT_NAME[P.hint]}` : 'Hints';
+  const approachLabel = prefs.approach === 'auto' ? `Approach · Auto: ${P.build ? 'build up' : 'whole'}` : 'Approach';
+  // Drill / build-up stage goes first so it stays visible when the line is truncated on phones.
+  const stage = P.drill ? `Re-drill (${P.drill.phrases} phrase${P.drill.phrases === 1 ? '' : 's'}) · `
+    : P.build ? `Step ${P.build.step + 1} of ${P.build.ends.length} · ` : '';
   $('#main').innerHTML = `
     <div class="page-head practice-head">
       <md-icon-button id="backBtn" aria-label="Back">${icon('arrow_back')}</md-icon-button>
       <div>
-        <div class="eyebrow">${where} · ${P.version} · ${s ? LEVELS[s.level] : 'New'}</div>
+        <div class="eyebrow">${stage}${where} · ${P.version} · ${s ? LEVELS[s.level] : 'New'}</div>
         <h2 class="headline" id="pTitle"></h2>
       </div>
       <div class="spacer"></div>
@@ -860,6 +946,7 @@ function renderPractice() {
       <div class="ctl"><span class="lbl">Type</span>${segSet('data-pref="mode"', [['letter', 'First letters'], ['word', 'Whole words']], prefs.mode)}</div>
       <div class="ctl"><span class="lbl">${hintLabel}</span>${segSet('data-pref="hint"', [['auto', 'Auto'], ['show', 'Full text'], ['initials', 'Initials'], ['hidden', 'None']], prefs.hint)}</div>
       <div class="ctl"><span class="lbl">Reference</span>${segSet('data-pref="ref"', [['off', 'Off'], ['start', 'Before'], ['both', 'Both']], prefs.ref)}</div>
+      ${P.chunks > 1 ? `<div class="ctl"><span class="lbl">${approachLabel}</span>${segSet('data-pref="approach"', [['auto', 'Auto'], ['whole', 'Whole'], ['build', 'Build up']], prefs.approach)}</div>` : ''}
     </div>
     <div class="card practice-card">
       <div class="practice-text" id="practiceText"></div>
@@ -868,7 +955,7 @@ function renderPractice() {
     <div class="stats" id="pStats"></div>
     <div id="pFoot"></div>`;
   $('#backBtn').onclick = () => { if (review) state.view = 'today'; practice = null; save(); renderAll(); };
-  $('#restartBtn').onclick = () => startPractice(P.passage);
+  $('#restartBtn').onclick = () => beginRun(runBase(P));
   $('#prevBtn').onclick = () => { const p = adjacentPassage(-1); if (p) startPractice(p); };
   $('#skipBtn').onclick = () => { const p = adjacentPassage(1); if (p) startPractice(p); };
   $('#practiceText').onclick = focusCatcher;
@@ -883,7 +970,7 @@ function updatePractice() {
     const shown = (st === 'correct' || st === 'missed') ? esc(w) : maskWord(w, P.hint, k === P.i ? P.keyPos : 0);
     const typed = k === P.i && prefs.mode === 'word' && P.typed ? `<span style="opacity:.8">${esc(P.typed)}</span>` : '';
     // Put the reference on its own line, apart from the passage text.
-    const brBefore = k > 0 && P.isRef[k] && !P.isRef[k - 1] ? '<br>' : '';
+    const brBefore = P.gaps?.has(k) ? '<span class="phrase-gap"></span>' : k > 0 && P.isRef[k] && !P.isRef[k - 1] ? '<br>' : '';
     const brAfter = k < P.words.length - 1 && P.isRef[k] && !P.isRef[k + 1] ? '<br>' : '';
     return `${brBefore}<span class="w ${st}${P.isRef[k] ? ' ref' : ''}" data-k="${k}">${typed || shown}</span>${brAfter}`;
   }).join(' ');
@@ -898,28 +985,59 @@ function updatePractice() {
   $('#pStats').innerHTML = stat('Progress', `${P.i}/${P.words.length}`) + stat('Accuracy', `${acc}%`) +
     stat('Time', `${secs}s`, 'pTime') + (best != null ? stat('Best', `${best}%`) : '');
 
-  const pv = done && adjacentPassage(-1), nx = done && adjacentPassage(1);
-  const endOfReview = done && P.ctx.kind === 'review' && !nx;
-  $('#pFoot').innerHTML = done ? `<div class="card done ${acc === 100 || P.result?.gold ? 'perfect' : ''}">
-      <div class="big">${acc}%</div>
-      <div>${correct} of ${P.words.length} words correct in ${secs}s${acc === 100 ? ' — perfect!' : ''}</div>
-      ${P.result ? `<div class="result-msg">${esc(P.result.msg)}</div>` : ''}
-      ${endOfReview ? `<div class="result-msg">${todayQueue().all.length ? 'End of this review.' : 'That\'s everything for today. Well done!'}</div>` : ''}
-      <div class="row">
-        ${pv ? `<md-outlined-button id="prevDoneBtn">${icon('arrow_back', 'icon')}Previous passage</md-outlined-button>` : ''}
-        <md-filled-button id="againBtn">${icon('replay', 'icon')}Practice again</md-filled-button>
-        ${nx ? `<md-outlined-button id="nextBtn" trailing-icon>${icon('arrow_forward', 'icon')}Next passage</md-outlined-button>` : ''}
-        ${endOfReview ? `<md-filled-tonal-button id="todayBtn">${icon('today', 'icon')}Back to Today</md-filled-tonal-button>` : ''}
-      </div>
-    </div>` : `<p class="hint">${prefs.mode === 'letter'
+  if (!done) {
+    const howTo = P.drill ? 'Re-drilling the phrases you missed, one per line. ' : P.build && P.build.step < P.build.ends.length - 1
+      ? 'Building up: each step adds the next part of the passage. ' : '';
+    $('#pFoot').innerHTML = `<p class="hint">${howTo}${prefs.mode === 'letter'
       ? 'Type the first letter of each word' + (prefs.ref !== 'off' ? ', and every digit of the chapter and verse' : '') + '. Two misses reveals the word.'
       : 'Type each word and press space. Punctuation and capitalization don\'t matter.'} Tap the passage if typing stops responding.</p>`;
-  if (done) {
-    $('#againBtn').onclick = () => startPractice(P.passage);
-    if (pv) $('#prevDoneBtn').onclick = () => startPractice(pv);
-    if (nx) $('#nextBtn').onclick = () => startPractice(nx);
-    if (endOfReview) $('#todayBtn').onclick = () => { state.view = 'today'; practice = null; save(); renderAll(); };
-  } else focusCatcher();
+    return focusCatcher();
+  }
+
+  // Results card: the main next step first, then navigation.
+  const misses = P.status.filter(st => st === 'missed').length;
+  const phrases = misses ? missedPhrases(P).length : 0;
+  const drillLabel = `Re-drill ${phrases} missed phrase${phrases === 1 ? '' : 's'}`;
+  const plural = (n, w) => `${n} ${w}${n === 1 ? '' : (w.endsWith('s') ? 'es' : 's')}`;
+  const acts = [];
+  let note = P.result?.msg || '';
+  if (P.drill) {
+    const back = P.drill.from.build && P.drill.from.build.step < P.drill.from.build.ends.length - 1
+      ? `Back to step ${P.drill.from.build.step + 1}` : 'Practice full passage';
+    note = misses ? `Still ${plural(misses, 'miss')}. Drill ${misses === 1 ? 'it' : 'them'} again, or go back to the passage.` : 'Every phrase correct. Now put it back together.';
+    if (misses) acts.push(['drillAgainBtn', 'filled', 'Drill again', 'replay', () => startDrill(P)]);
+    acts.push(['backFullBtn', misses ? 'outlined' : 'filled', back, 'play_arrow', () => beginRun(P.drill.from)]);
+  } else if (P.build && P.build.step < P.build.ends.length - 1) {
+    const step = P.build.step, n = P.build.ends.length;
+    const next = () => startPractice(P.passage, P.ctx, { step: step + 1 });
+    if (acc >= GOOD) {
+      note = `Step ${step + 1} of ${n} done. The next step adds the next part.`;
+      acts.push(['nextStepBtn', 'filled', `Next step (${step + 2} of ${n})`, 'arrow_forward', next]);
+    } else {
+      note = `Score ${GOOD}% or more to move on${misses ? ', or re-drill what you missed first' : ''}.`;
+      acts.push(['retryStepBtn', 'filled', 'Try step again', 'replay', () => beginRun(runBase(P))]);
+      acts.push(['nextStepBtn', 'outlined', 'Next step anyway', 'arrow_forward', next]);
+    }
+    if (misses) acts.push(['drillBtn', 'filled-tonal', drillLabel, 'replay', () => startDrill(P)]);
+  } else {
+    if (misses) acts.push(['drillBtn', 'filled', drillLabel, 'replay', () => startDrill(P)]);
+    acts.push(['againBtn', misses ? 'outlined' : 'filled', 'Practice again', 'replay', () => startPractice(P.passage)]);
+  }
+  const pv = adjacentPassage(-1), nx = adjacentPassage(1);
+  const endOfReview = P.ctx.kind === 'review' && !nx && !P.drill && !(P.build && P.build.step < P.build.ends.length - 1);
+  if (pv) acts.push(['prevDoneBtn', 'outlined', 'Previous passage', 'arrow_back', () => startPractice(pv)]);
+  if (nx) acts.push(['nextBtn', 'outlined', 'Next passage', 'arrow_forward', () => startPractice(nx), true]);
+  if (endOfReview) acts.push(['todayBtn', 'filled-tonal', 'Back to Today', 'today', () => { state.view = 'today'; practice = null; save(); renderAll(); }]);
+
+  $('#pFoot').innerHTML = `<div class="card done ${acc === 100 || P.result?.gold ? 'perfect' : ''}">
+      <div class="big">${acc}%</div>
+      <div>${correct} of ${P.words.length} words correct in ${secs}s${acc === 100 ? ' — perfect!' : ''}</div>
+      ${note ? `<div class="result-msg">${esc(note)}</div>` : ''}
+      ${endOfReview ? `<div class="result-msg">${todayQueue().all.length ? 'End of this review.' : 'That\'s everything for today. Well done!'}</div>` : ''}
+      <div class="row">${acts.map(([id, kind, label, ic, , trailing]) =>
+        `<md-${kind}-button id="${id}"${trailing ? ' trailing-icon' : ''}>${icon(ic, 'icon')}${esc(label)}</md-${kind}-button>`).join('')}</div>
+    </div>`;
+  for (const [id, , , , fn] of acts) $('#' + id).onclick = fn;
 }
 
 $('#main').addEventListener('segmented-button-set-selection', e => {
@@ -945,6 +1063,7 @@ function finishIfDone() {
   if (P.i < P.words.length) return;
   P.end = Date.now();
   const acc = Math.round(100 * P.status.filter(s => s === 'correct').length / P.words.length);
+  if (P.drill || (P.build && P.build.step < P.build.ends.length - 1)) return;
   const best = P.passage.best ||= {};
   if (best[P.version] == null || acc > best[P.version]) best[P.version] = acc;
   P.result = recordRun(P, acc);

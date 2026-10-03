@@ -5,6 +5,9 @@ A typing-based Bible memorization app. Make lists of passages, then practice by 
 - **Today** queue with spaced repetition: due reviews plus a few new passages a day (Settings → New passages per day).
 - **Levels** fade the hints automatically: Learning (full text) → Familiar (first letters) → Recalling (no hints) → Memorized.
   Learning passages come back daily; memorized ones at 1, 3, 7, 14, 30, 60, 120 days. A score under 70% drops a level.
+- **Re-drill**: after a run with misses, practice just the phrases around each missed word (drills don't affect scores).
+- **Build-up**: long passages are learned in steps (verse 1, then 1-2, then 1-3...); WEB splits by verse, other text by sentence.
+  Auto uses it for new passages with 3+ chunks; only the final full-passage step counts.
 
 - **WEB** (World English Bible, public domain, from eBible.org) is built in and works offline.
 - **NIV, NASB, NLT** are copyrighted and not included: paste text per passage, or fetch with an [API.Bible](https://scripture.api.bible) key.
