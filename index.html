@@ -51,6 +51,13 @@
   .nav-item .label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .nav-item.active { background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); }
   .nav-item:focus { outline: none; }
+  .nav-row { position: relative; display: flex; align-items: center; }
+  #lists .nav-item { padding-right: 52px; }
+  .nav-del { position: absolute; right: 8px; --md-icon-button-icon-size: 20px;
+    --md-icon-button-state-layer-width: 36px; --md-icon-button-state-layer-height: 36px;
+    --md-icon-button-icon-color: var(--md-sys-color-error); --md-icon-button-hover-icon-color: var(--md-sys-color-error);
+    --md-icon-button-focus-icon-color: var(--md-sys-color-error); --md-icon-button-pressed-icon-color: var(--md-sys-color-error);
+    --md-icon-button-hover-state-layer-color: var(--md-sys-color-error); --md-icon-button-pressed-state-layer-color: var(--md-sys-color-error); }
   .drawer md-text-button { margin: 8px 4px; }
 
   main { padding: 24px 32px 48px; max-width: 960px; width: 100%; }
@@ -139,6 +146,11 @@
     .nav-item { width: auto; height: 36px; padding: 0 14px 0 10px; border-radius: 8px; flex-shrink: 0; gap: 6px;
       border: 1px solid var(--md-sys-color-outline-variant); --md-focus-ring-shape: 8px; --md-icon-size: 18px; }
     .nav-item.active { border-color: transparent; }
+    .nav-row { flex-shrink: 0; }
+    #lists .nav-item { padding-right: 14px; }
+    #lists .nav-row.active .nav-item { padding-right: 40px; }
+    .nav-row:not(.active) .nav-del { display: none; } /* phones: only the open list, to avoid stray taps */
+    .nav-del { right: 2px; }
     .nav-item .label { max-width: 40vw; }
     .drawer md-text-button { margin: 0; flex-shrink: 0; }
     main { padding: 16px 16px 40px; }
@@ -440,13 +452,20 @@ function renderLists() {
        <md-ripple></md-ripple><md-focus-ring inward></md-focus-ring>
        ${icon('today')}<span class="label">Today</span><span>${todayQueue().all.length || ''}</span>
      </button>`;
-  $('#lists').innerHTML = state.lists.map(l =>
-    `<button class="nav-item ${l.id === active?.id ? 'active' : ''}" data-id="${l.id}">
-       <md-ripple></md-ripple><md-focus-ring inward></md-focus-ring>
-       ${icon('format_list_bulleted')}<span class="label">${esc(l.name)}</span><span>${l.passages.length}</span>
-     </button>`).join('');
+  $('#lists').innerHTML = state.lists.map(l => {
+    const on = l.id === active?.id ? 'active' : '';
+    return `<div class="nav-row ${on}">
+       <button class="nav-item ${on}" data-id="${l.id}">
+         <md-ripple></md-ripple><md-focus-ring inward></md-focus-ring>
+         ${icon('format_list_bulleted')}<span class="label">${esc(l.name)}</span><span>${l.passages.length}</span>
+       </button>
+       <md-icon-button class="nav-del" data-del="${l.id}" aria-label="Delete list ${esc(l.name)}" title="Delete list">${icon('delete')}</md-icon-button>
+     </div>`;
+  }).join('');
 }
 $('#lists').onclick = e => {
+  const del = e.target.closest('[data-del]');
+  if (del) return deleteList(state.lists.find(l => l.id === del.dataset.del));
   const el = e.target.closest('.nav-item'); if (!el) return;
   state.activeListId = el.dataset.id; state.view = 'list'; practice = null; save(); renderAll();
 };
@@ -537,14 +556,7 @@ $('#main').addEventListener('click', async e => {
     if (name) { list.name = name; save(); renderAll(); }
     return;
   }
-  if (act === 'delete-list') {
-    const n = list.passages.length;
-    if (!await ask({ title: `Delete "${list.name}"?`, text: `This removes the list and its ${n} passage${n === 1 ? '' : 's'}.`, ok: 'Delete', danger: true })) return;
-    state.lists = state.lists.filter(l => l.id !== list.id);
-    if (!state.lists.length) state.lists.push({ id: uid(), name: 'Favorites', passages: [] });
-    state.activeListId = state.lists[0].id; save(); renderAll();
-    return;
-  }
+  if (act === 'delete-list') return deleteList(list);
   const card = btn.closest('.passage'); if (!card) return;
   const found = findPassage(card.dataset.id); if (!found) return;
   const { p } = found;
@@ -554,6 +566,18 @@ $('#main').addEventListener('click', async e => {
     found.list.passages = found.list.passages.filter(x => x.id !== p.id); save(); renderAll();
   }
 });
+
+// Asks first; keeps at least one list, and leaves practice if its passage was in the deleted list.
+async function deleteList(list) {
+  if (!list) return;
+  const n = list.passages.length;
+  if (!await ask({ title: `Delete "${list.name}"?`, text: `This removes the list and its ${n} passage${n === 1 ? '' : 's'}. This can't be undone.`, ok: 'Delete', danger: true })) return;
+  state.lists = state.lists.filter(l => l.id !== list.id);
+  if (!state.lists.length) state.lists.push({ id: uid(), name: 'Favorites', passages: [] });
+  if (!state.lists.some(l => l.id === state.activeListId)) state.activeListId = state.lists[0].id;
+  if (practice && !findPassage(practice.passage.id)) practice = null;
+  save(); renderAll();
+}
 
 function renderAll() { renderVersions(); renderLists(); practice ? renderPractice() : renderMain(); }
 
