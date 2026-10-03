@@ -129,6 +129,8 @@
     .page-head .actions { flex-basis: 100%; }
     .practice-head { flex-wrap: nowrap; }
     .practice-head > div:not(.spacer) { min-width: 0; }
+    .practice-head .headline { font-size: 20px; line-height: 28px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .practice-head { gap: 2px; }
     .restart-label { display: none; }
     #restartBtn { --md-outlined-button-leading-space: 12px; --md-outlined-button-trailing-space: 12px;
       --md-outlined-button-with-leading-icon-leading-space: 12px; --md-outlined-button-with-leading-icon-trailing-space: 12px; }
@@ -678,7 +680,9 @@ function renderPractice() {
         <h2 class="headline" id="pTitle"></h2>
       </div>
       <div class="spacer"></div>
+      <md-icon-button id="prevBtn" aria-label="Previous passage" title="Previous passage" ${adjacentPassage(-1) ? '' : 'disabled'}>${icon('skip_previous')}</md-icon-button>
       <md-outlined-button id="restartBtn" aria-label="Restart">${icon('replay', 'icon')}<span class="restart-label">Restart</span></md-outlined-button>
+      <md-icon-button id="skipBtn" aria-label="Next passage" title="Next passage" ${adjacentPassage(1) ? '' : 'disabled'}>${icon('skip_next')}</md-icon-button>
     </div>
     <div class="controls">
       <div class="ctl"><span class="lbl">Type</span>${segSet('data-pref="mode"', [['letter', 'First letters'], ['word', 'Whole words']], prefs.mode)}</div>
@@ -693,6 +697,8 @@ function renderPractice() {
     <div id="pFoot"></div>`;
   $('#backBtn').onclick = () => { practice = null; renderMain(); };
   $('#restartBtn').onclick = () => startPractice(P.passage);
+  $('#prevBtn').onclick = () => { const p = adjacentPassage(-1); if (p) startPractice(p); };
+  $('#skipBtn').onclick = () => { const p = adjacentPassage(1); if (p) startPractice(p); };
   $('#practiceText').onclick = focusCatcher;
   updatePractice();
 }
@@ -720,11 +726,12 @@ function updatePractice() {
   $('#pStats').innerHTML = stat('Progress', `${P.i}/${P.words.length}`) + stat('Accuracy', `${acc}%`) +
     stat('Time', `${secs}s`, 'pTime') + (best != null ? stat('Best', `${best}%`) : '');
 
-  const nx = done && nextPassage();
+  const pv = done && adjacentPassage(-1), nx = done && adjacentPassage(1);
   $('#pFoot').innerHTML = done ? `<div class="card done ${acc === 100 ? 'perfect' : ''}">
       <div class="big">${acc}%</div>
       <div>${correct} of ${P.words.length} words correct in ${secs}s${acc === 100 ? ' — perfect!' : ''}</div>
       <div class="row">
+        ${pv ? `<md-outlined-button id="prevDoneBtn">${icon('arrow_back', 'icon')}Previous passage</md-outlined-button>` : ''}
         <md-filled-button id="againBtn">${icon('replay', 'icon')}Practice again</md-filled-button>
         ${nx ? `<md-outlined-button id="nextBtn" trailing-icon>${icon('arrow_forward', 'icon')}Next passage</md-outlined-button>` : ''}
       </div>
@@ -733,6 +740,7 @@ function updatePractice() {
       : 'Type each word and press space. Punctuation and capitalization don\'t matter.'} Tap the passage if typing stops responding.</p>`;
   if (done) {
     $('#againBtn').onclick = () => startPractice(P.passage);
+    if (pv) $('#prevDoneBtn').onclick = () => startPractice(pv);
     if (nx) $('#nextBtn').onclick = () => startPractice(nx);
   } else focusCatcher();
 }
@@ -743,10 +751,11 @@ $('#main').addEventListener('segmented-button-set-selection', e => {
   if (pref === 'hint') updatePractice(); else startPractice(practice.passage);
 });
 
-function nextPassage() {
+// The passage before (dir = -1) or after (dir = 1) the current one, skipping any without text in this version.
+function adjacentPassage(dir) {
   const ps = activeList().passages.filter(p => textFor(p, state.version));
   const k = ps.findIndex(p => p.id === practice.passage.id);
-  return ps[k + 1] || null;
+  return k < 0 ? null : ps[k + dir] || null;
 }
 
 function focusCatcher() { const c = $('#catcher'); c.value = ''; c.focus({ preventScroll: true }); }
