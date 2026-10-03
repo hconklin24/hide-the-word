@@ -3,175 +3,233 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#236b41">
 <title>Hide the Word</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif:wght@400;600&family=Roboto:wght@400;500&display=swap">
+<link rel="stylesheet" href="theme.css">
 <style>
   :root {
-    --bg: #f7f4ee; --panel: #fffdf9; --ink: #2a2622; --muted: #8a8178; --line: #e4ddd2;
-    --accent: #7a4b2a; --accent-ink: #fff; --good: #2f7d4f; --bad: #b3412f; --pending: #c9c0b4;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg: #1b1916; --panel: #24211d; --ink: #ece6dd; --muted: #9a9086; --line: #3a352f;
-      --accent: #d29a6a; --accent-ink: #1b1916; --good: #6cc48f; --bad: #e57a66; --pending: #5a534b; }
+    --md-ref-typeface-brand: 'Roboto', system-ui, -apple-system, sans-serif;
+    --md-ref-typeface-plain: 'Roboto', system-ui, -apple-system, sans-serif;
+    --scripture: 'Noto Serif', Georgia, serif;
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 -apple-system, system-ui, sans-serif; }
-  button, input, select, textarea { font: inherit; color: inherit; }
-  button { cursor: pointer; border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 6px 12px; }
-  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
-  button.ghost { border-color: transparent; background: transparent; color: var(--muted); }
-  button:disabled { opacity: .45; cursor: default; }
-  input, select, textarea { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; width: 100%; }
-  textarea { min-height: 110px; resize: vertical; font-family: Georgia, serif; }
-  header { display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-bottom: 1px solid var(--line); background: var(--panel); flex-wrap: wrap; }
-  header h1 { font: 600 20px Georgia, serif; margin: 0; flex: 1; }
-  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
-  .seg button { border: 0; border-radius: 0; padding: 6px 14px; }
-  .seg button.on { background: var(--accent); color: var(--accent-ink); }
-  .layout { display: grid; grid-template-columns: 240px 1fr; min-height: calc(100vh - 58px); }
-  aside { border-right: 1px solid var(--line); padding: 16px; }
-  aside h2, main h2 { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 10px; }
-  .list-item { display: flex; align-items: center; justify-content: space-between; padding: 7px 10px; border-radius: 8px; cursor: pointer; }
-  .list-item.on { background: var(--panel); border: 1px solid var(--line); }
-  .list-item .count { color: var(--muted); font-size: 13px; }
-  .row { display: flex; gap: 8px; align-items: center; }
-  main { padding: 20px 28px; max-width: 900px; width: 100%; }
-  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; }
-  .passage { display: flex; gap: 14px; align-items: center; }
-  .passage .ref { font: 600 16px Georgia, serif; }
-  .passage .preview { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .passage .body { flex: 1; min-width: 0; }
-  .badge { font-size: 12px; padding: 2px 8px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
-  .badge.good { color: var(--good); border-color: var(--good); }
-  .muted { color: var(--muted); }
-  .title-row { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
-  .title-row h3 { font: 600 24px Georgia, serif; margin: 0; flex: 1; }
-  .empty { text-align: center; padding: 40px 10px; color: var(--muted); }
-  label.f { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
-  .tabs { display: flex; gap: 4px; margin-top: 10px; }
-  .tabs button { border-radius: 8px 8px 0 0; border-bottom: 0; }
-  .tabs button.on { background: var(--bg); font-weight: 600; }
-  dialog { border: 1px solid var(--line); border-radius: 14px; background: var(--panel); color: var(--ink); width: min(620px, 94vw); padding: 20px; }
-  dialog::backdrop { background: rgba(0,0,0,.35); }
-  .msg { font-size: 13px; margin-top: 6px; min-height: 18px; }
-  .msg.err { color: var(--bad); } .msg.ok { color: var(--good); }
+  body { margin: 0; background: var(--md-sys-color-surface); color: var(--md-sys-color-on-surface);
+    font: 400 14px/20px var(--md-ref-typeface-plain); -webkit-font-smoothing: antialiased; }
+  md-icon svg { width: 1em; height: 1em; fill: currentColor; }
+  .muted { color: var(--md-sys-color-on-surface-variant); }
+  .spacer { flex: 1; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+  /* Top app bar */
+  .top-bar { display: flex; align-items: center; gap: 12px; padding: 8px 12px 8px 20px; min-height: 64px;
+    background: var(--md-sys-color-surface); position: sticky; top: 0; z-index: 2;
+    border-bottom: 1px solid var(--md-sys-color-outline-variant); }
+  .top-bar .logo { color: var(--md-sys-color-tertiary); --md-icon-size: 28px; }
+  .top-bar h1 { font: 400 22px/28px var(--md-ref-typeface-brand); margin: 0; flex: 1; white-space: nowrap; }
+  .top-bar h1 b { font-weight: 500; color: var(--md-sys-color-primary); }
+
+  .layout { display: grid; grid-template-columns: 280px minmax(0, 1fr); min-height: calc(100vh - 65px); }
+
+  /* Navigation drawer (lists) */
+  .drawer { padding: 12px; background: var(--md-sys-color-surface-container-low); }
+  .drawer-label { font: 500 14px/20px var(--md-ref-typeface-plain); color: var(--md-sys-color-on-surface-variant);
+    padding: 18px 16px 10px; }
+  .nav-item { position: relative; display: flex; align-items: center; gap: 12px; width: 100%; height: 56px;
+    padding: 0 24px 0 16px; border: 0; border-radius: 28px; background: none; cursor: pointer;
+    color: var(--md-sys-color-on-surface-variant); font: 500 14px/20px var(--md-ref-typeface-plain); text-align: left;
+    --md-focus-ring-shape: 28px; }
+  .nav-item .label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .nav-item.active { background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); }
+  .nav-item:focus { outline: none; }
+  .drawer md-text-button { margin: 8px 4px; }
+
+  main { padding: 24px 32px 48px; max-width: 960px; width: 100%; }
+
+  .page-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
+  .headline { font: 400 28px/36px var(--md-ref-typeface-brand); margin: 0; }
+  .eyebrow { font: 500 12px/16px var(--md-ref-typeface-plain); letter-spacing: .5px; color: var(--md-sys-color-on-surface-variant); }
+  .anchor { position: relative; }
+
+  /* Cards */
+  .card { background: var(--md-sys-color-surface-container-low); border-radius: 12px; padding: 16px;
+    border: 1px solid var(--md-sys-color-outline-variant); }
+  .passage { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .passage .body { flex: 1; min-width: 0; padding-right: 8px; }
+  .passage .ref-row { display: flex; align-items: center; gap: 10px; margin-bottom: 2px; }
+  .passage .ref { font: 600 16px/24px var(--scripture); }
+  .passage .preview { color: var(--md-sys-color-on-surface-variant); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .chip { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px; border-radius: 8px;
+    font: 500 12px/16px var(--md-ref-typeface-plain); white-space: nowrap;
+    border: 1px solid var(--md-sys-color-outline-variant); color: var(--md-sys-color-on-surface-variant); --md-icon-size: 16px; }
+  .chip.gold { background: var(--md-sys-color-tertiary-container); color: var(--md-sys-color-on-tertiary-container); border-color: transparent; }
+
+  .empty { text-align: center; padding: 56px 16px; color: var(--md-sys-color-on-surface-variant); }
+  .empty md-icon { --md-icon-size: 48px; color: var(--md-sys-color-tertiary); margin-bottom: 8px; }
+  .empty p { margin: 0 0 16px; }
+
+  /* Dialogs */
+  md-dialog { width: min(600px, calc(100vw - 32px)); max-width: none; }
+  md-dialog [slot="content"] { display: flex; flex-direction: column; gap: 16px; }
+  md-dialog p { margin: 0; }
+  md-dialog a { color: var(--md-sys-color-primary); }
+  md-outlined-text-field { width: 100%; }
+  md-outlined-text-field.scripture { --md-outlined-text-field-input-text-font: var(--scripture); }
+  .msg { font-size: 13px; min-height: 18px; white-space: pre-line; }
+  .msg.err { color: var(--md-sys-color-error); } .msg.ok { color: var(--md-sys-color-primary); }
+  .section-label { font: 500 14px/20px var(--md-ref-typeface-plain); color: var(--md-sys-color-on-surface-variant); }
+  md-filled-button.danger { --md-filled-button-container-color: var(--md-sys-color-error);
+    --md-filled-button-label-text-color: var(--md-sys-color-on-error); }
 
   /* Practice */
-  .practice-text { font: 22px/1.9 Georgia, serif; padding: 22px; min-height: 160px; cursor: text; outline: none; }
-  .w { white-space: nowrap; border-radius: 4px; padding: 0 1px; }
-  .w.pending { color: var(--pending); }
-  .w.correct { color: var(--ink); }
+  .controls { display: flex; flex-wrap: wrap; gap: 16px 24px; margin-bottom: 16px; }
+  .ctl { display: flex; flex-direction: column; gap: 6px; }
+  .ctl .lbl { font: 500 12px/16px var(--md-ref-typeface-plain); letter-spacing: .5px; color: var(--md-sys-color-on-surface-variant); }
+  md-outlined-segmented-button-set { --md-outlined-segmented-button-container-height: 36px; }
+  .practice-card { padding: 0; overflow: hidden; }
+  .practice-text { font: 22px/1.9 var(--scripture); padding: 24px 28px; min-height: 160px; cursor: text; }
+  .practice-card md-linear-progress { width: 100%; --md-linear-progress-track-height: 6px;
+    --md-linear-progress-active-indicator-height: 6px; --md-linear-progress-track-shape: 0; }
+  .w { white-space: nowrap; border-radius: 6px; padding: 0 2px; transition: background .1s; }
+  .w.pending { color: var(--md-sys-color-outline); }
+  .w.correct { color: var(--md-sys-color-on-surface); }
   .w.ref { font-variant: small-caps; letter-spacing: .03em; }
-  .w.missed { color: var(--bad); text-decoration: underline wavy; text-decoration-thickness: 1px; }
-  .w.current { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
-  .w.shake { animation: shake .25s; background: color-mix(in srgb, var(--bad) 25%, transparent); }
+  .w.ref.correct { color: var(--md-sys-color-primary); }
+  .w.missed { color: var(--md-sys-color-error); text-decoration: underline wavy; text-decoration-thickness: 1px; }
+  .w.current { background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container); }
+  .w.shake { animation: shake .25s; background: var(--md-sys-color-error-container); color: var(--md-sys-color-on-error-container); }
   @keyframes shake { 25% { transform: translateX(-3px);} 75% { transform: translateX(3px);} }
-  .stats { display: flex; gap: 22px; color: var(--muted); font-size: 14px; flex-wrap: wrap; }
-  .stats b { color: var(--ink); }
-  .controls { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin: 12px 0; }
-  .controls .lbl { font-size: 12px; color: var(--muted); margin-right: 6px; }
-  #catcher { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
-  .done { text-align: center; padding: 10px 0 4px; }
-  .done .big { font: 600 40px Georgia, serif; }
-  .bar { height: 6px; background: var(--line); border-radius: 99px; overflow: hidden; margin-top: 10px; }
-  .bar > div { height: 100%; background: var(--accent); transition: width .15s; }
+  .stats { display: flex; gap: 32px; flex-wrap: wrap; margin: 16px 4px; }
+  .stat .k { font: 500 12px/16px var(--md-ref-typeface-plain); color: var(--md-sys-color-on-surface-variant); }
+  .stat .v { font: 400 22px/28px var(--md-ref-typeface-brand); }
+  .hint { font-size: 13px; color: var(--md-sys-color-on-surface-variant); margin: 0 4px; }
+  .done { text-align: center; padding: 24px 16px; border: 0; background: var(--md-sys-color-secondary-container);
+    color: var(--md-sys-color-on-secondary-container); }
+  .done.perfect { background: var(--md-sys-color-tertiary-container); color: var(--md-sys-color-on-tertiary-container); }
+  .done .big { font: 400 45px/52px var(--md-ref-typeface-brand); }
+  .done .row { justify-content: center; margin-top: 16px; }
+  #catcher { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; font-size: 16px; }
 
-  main, .passage .body, .row input { min-width: 0; }
   @media (max-width: 720px) {
-    header { padding: 10px 16px; gap: 8px; }
-    header h1 { font-size: 18px; flex-basis: 100%; }
-    .seg button { padding: 6px 11px; }
+    .top-bar { flex-wrap: wrap; padding: 8px 8px 8px 16px; gap: 4px 8px; }
+    .top-bar #versionSeg { order: 3; flex-basis: 100%; margin-bottom: 4px; }
     .layout { grid-template-columns: minmax(0, 1fr); align-content: start; min-height: 0; }
-    aside { border-right: 0; border-bottom: 1px solid var(--line); }
-    main { padding: 16px; }
-    .title-row { flex-wrap: wrap; }
-    .title-row h3 { flex-basis: 100%; font-size: 21px; }
-    .practice-text { font-size: 19px; padding: 14px; }
+    .drawer { display: flex; gap: 8px; overflow-x: auto; padding: 8px 16px; align-items: center; }
+    .drawer-label { display: none; }
+    .nav-item { width: auto; height: 36px; padding: 0 14px 0 10px; border-radius: 8px; flex-shrink: 0; gap: 6px;
+      border: 1px solid var(--md-sys-color-outline-variant); --md-focus-ring-shape: 8px; --md-icon-size: 18px; }
+    .nav-item.active { border-color: transparent; }
+    .nav-item .label { max-width: 40vw; }
+    .drawer md-text-button { margin: 0; flex-shrink: 0; }
+    main { padding: 16px 16px 40px; }
+    .headline { font-size: 24px; line-height: 32px; }
+    .page-head .actions { flex-basis: 100%; }
     .passage { flex-wrap: wrap; }
     .passage .body { flex-basis: 100%; }
-    /* iOS zooms the page when focusing inputs smaller than 16px */
-    input, select, textarea, #catcher { font-size: 16px; }
+    .practice-text { font-size: 19px; padding: 16px 18px; }
+    .controls { gap: 12px; }
+    .stats { gap: 24px; }
   }
 </style>
 </head>
 <body>
-<header>
-  <h1>Hide the Word</h1>
-  <div class="seg" id="versionSeg"></div>
-  <button class="ghost" id="settingsBtn" title="Settings">⚙ Settings</button>
+<header class="top-bar">
+  <md-icon class="logo" data-icon="menu_book"></md-icon>
+  <h1>Hide the <b>Word</b></h1>
+  <md-outlined-segmented-button-set id="versionSeg" aria-label="Bible version"></md-outlined-segmented-button-set>
+  <md-icon-button id="settingsBtn" aria-label="Settings"><md-icon data-icon="settings"></md-icon></md-icon-button>
 </header>
 
 <div class="layout">
-  <aside>
-    <h2>My lists</h2>
-    <div id="lists"></div>
-    <div class="row" style="margin-top:10px">
-      <input id="newListName" placeholder="New list name">
-      <button id="addListBtn">Add</button>
-    </div>
-  </aside>
+  <nav class="drawer" aria-label="Lists">
+    <div class="drawer-label">My lists</div>
+    <div id="lists" style="display:contents"></div>
+    <md-text-button id="addListBtn"><md-icon slot="icon" data-icon="add"></md-icon>New list</md-text-button>
+  </nav>
   <main id="main"></main>
 </div>
 
 <!-- Add / edit passage -->
-<dialog id="passageDlg">
-  <h3 style="margin:0 0 6px;font-family:Georgia,serif" id="passageDlgTitle">Add passage</h3>
-  <label class="f">Reference</label>
-  <input id="refInput" placeholder="e.g. John 3:16-17, Psalm 23, Romans 8:28">
-  <div class="tabs" id="textTabs"></div>
-  <textarea id="textInput" placeholder="Paste the passage text for this version"></textarea>
-  <div class="row" style="justify-content:space-between;margin-top:8px">
-    <button id="fetchBtn">Fetch from API.Bible</button>
-    <span class="msg" id="fetchMsg"></span>
+<md-dialog id="passageDlg">
+  <div slot="headline" id="passageDlgTitle">Add passage</div>
+  <div slot="content">
+    <md-outlined-text-field id="refInput" label="Reference" supporting-text="e.g. John 3:16-17, Psalm 23, Romans 8:28"></md-outlined-text-field>
+    <md-outlined-segmented-button-set id="textTabs" aria-label="Version"></md-outlined-segmented-button-set>
+    <md-outlined-text-field id="textInput" class="scripture" type="textarea" rows="6"></md-outlined-text-field>
+    <div class="row">
+      <md-outlined-button id="fetchBtn"><md-icon slot="icon" data-icon="cloud_download"></md-icon><span id="fetchLabel">Fetch</span></md-outlined-button>
+      <span class="msg" id="fetchMsg"></span>
+    </div>
   </div>
-  <div class="row" style="justify-content:flex-end;margin-top:16px">
-    <button class="ghost" id="passageCancel">Cancel</button>
-    <button class="primary" id="passageSave">Save</button>
+  <div slot="actions">
+    <md-text-button id="passageCancel">Cancel</md-text-button>
+    <md-filled-button id="passageSave">Save</md-filled-button>
   </div>
-</dialog>
+</md-dialog>
 
 <!-- Bulk add -->
-<dialog id="bulkDlg">
-  <h3 style="margin:0 0 6px;font-family:Georgia,serif">Add many passages</h3>
-  <p class="muted" style="font-size:14px;margin:0">
-    Separate references with commas, semicolons or new lines. Shorthand carries the book and chapter forward:
-    <i>John 3:16, 18, 4:24; Psalm 23, 91</i>.
-  </p>
-  <textarea id="bulkInput" style="font-family:inherit" placeholder="Romans 8:28, Philippians 4:6-7, Joshua 1:9"></textarea>
-  <div class="msg" id="bulkMsg" style="white-space:pre-line"></div>
-  <div class="row" style="justify-content:flex-end;margin-top:16px">
-    <button class="ghost" id="bulkCancel">Close</button>
-    <button class="primary" id="bulkSave">Add to list</button>
+<md-dialog id="bulkDlg">
+  <div slot="headline">Add many passages</div>
+  <div slot="content">
+    <p class="muted">Separate references with commas, semicolons or new lines. Shorthand carries the book and chapter
+      forward: <i>John 3:16, 18, 4:24; Psalm 23, 91</i>.</p>
+    <md-outlined-text-field id="bulkInput" type="textarea" rows="5" label="References"
+      placeholder="Romans 8:28, Philippians 4:6-7, Joshua 1:9"></md-outlined-text-field>
+    <div class="msg" id="bulkMsg"></div>
   </div>
-</dialog>
+  <div slot="actions">
+    <md-text-button id="bulkCancel">Close</md-text-button>
+    <md-filled-button id="bulkSave">Add to list</md-filled-button>
+  </div>
+</md-dialog>
 
 <!-- Settings -->
-<dialog id="settingsDlg">
-  <h3 style="margin:0 0 6px;font-family:Georgia,serif">Settings</h3>
-  <p class="muted" style="font-size:14px;margin:0">
-    The World English Bible (WEB) is built in and works offline. NIV, NASB and NLT are copyrighted,
-    so the app doesn't ship their text. You can paste text per passage,
-    or add a free <a href="https://scripture.api.bible" target="_blank" rel="noopener" style="color:var(--accent)">API.Bible</a>
-    key to fetch passages automatically (only versions your key is licensed for will work).
-  </p>
-  <label class="f">API.Bible key</label>
-  <input id="apiKeyInput" placeholder="Paste your API key">
-  <div class="msg" id="settingsMsg"></div>
-  <label class="f">Backup</label>
-  <div class="row">
-    <button id="exportBtn">Export data</button>
-    <button id="importBtn">Import data</button>
-    <input type="file" id="importFile" accept="application/json" hidden>
+<md-dialog id="settingsDlg">
+  <div slot="headline">Settings</div>
+  <div slot="content">
+    <p class="muted">The World English Bible (WEB) is built in and works offline. NIV, NASB and NLT are copyrighted,
+      so the app doesn't ship their text. Paste text per passage, or add a free
+      <a href="https://scripture.api.bible" target="_blank" rel="noopener">API.Bible</a> key to fetch passages
+      (only versions your key is licensed for will work).</p>
+    <div class="row" style="flex-wrap:nowrap">
+      <md-outlined-text-field id="apiKeyInput" label="API.Bible key"></md-outlined-text-field>
+      <md-filled-tonal-button id="settingsSave">Save</md-filled-tonal-button>
+    </div>
+    <md-divider></md-divider>
+    <div class="section-label">Backup</div>
+    <div class="row">
+      <md-outlined-button id="exportBtn"><md-icon slot="icon" data-icon="download"></md-icon>Export lists</md-outlined-button>
+      <md-outlined-button id="importBtn"><md-icon slot="icon" data-icon="upload"></md-icon>Import lists</md-outlined-button>
+      <input type="file" id="importFile" accept="application/json" hidden>
+    </div>
+    <div class="msg" id="settingsMsg"></div>
   </div>
-  <div class="row" style="justify-content:flex-end;margin-top:16px">
-    <button class="ghost" id="settingsCancel">Close</button>
-    <button class="primary" id="settingsSave">Save key</button>
+  <div slot="actions">
+    <md-text-button id="settingsCancel">Close</md-text-button>
   </div>
-</dialog>
+</md-dialog>
+
+<!-- Generic confirm / prompt -->
+<md-dialog id="askDlg">
+  <div slot="headline" id="askTitle"></div>
+  <div slot="content">
+    <p id="askText" class="muted"></p>
+    <md-outlined-text-field id="askInput"></md-outlined-text-field>
+  </div>
+  <div slot="actions">
+    <md-text-button id="askCancel">Cancel</md-text-button>
+    <md-filled-button id="askOk">OK</md-filled-button>
+  </div>
+</md-dialog>
 
 <input id="catcher" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
 
 <script src="web.js"></script>
-<script>
+<script type="module" src="vendor/material.js"></script>
+<script type="module">
 const VERSIONS = ['WEB', 'NIV', 'NASB', 'NLT'];
 const BUNDLED = 'WEB'; // public domain, shipped inside the app
 const STORE_KEY = 'hideTheWord.v1';
@@ -203,34 +261,64 @@ const activeList = () => state.lists.find(l => l.id === state.activeListId) || s
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
 
-// ---------- Rendering: header + sidebar ----------
-function renderVersions() {
-  $('#versionSeg').innerHTML = VERSIONS.map(v =>
-    `<button data-v="${v}" class="${v === state.version ? 'on' : ''}">${v}</button>`).join('');
+// ---------- Material helpers ----------
+const svg = name => `<svg viewBox="0 -960 960 960" aria-hidden="true"><path d="${window.MD_ICONS[name]}"/></svg>`;
+const icon = (name, slot) => `<md-icon${slot ? ` slot="${slot}"` : ''}>${svg(name)}</md-icon>`;
+const fillIcons = root => root.querySelectorAll('md-icon[data-icon]').forEach(el => { el.innerHTML = svg(el.dataset.icon); });
+
+// Segmented button set; `selected` is the value currently chosen.
+const segSet = (attrs, opts, selected, noCheck) =>
+  `<md-outlined-segmented-button-set ${attrs}>${opts.map(([val, label]) =>
+    `<md-outlined-segmented-button data-val="${val}" label="${esc(label)}"${val === selected ? ' selected' : ''}${noCheck ? ' no-checkmark' : ''}></md-outlined-segmented-button>`).join('')}</md-outlined-segmented-button-set>`;
+const segInner = html => html.replace(/^<md-outlined-segmented-button-set[^>]*>|<\/md-outlined-segmented-button-set>$/g, '');
+
+// Promise-based replacement for confirm()/prompt(). Resolves to the input value (prompt), true (confirm), or null.
+let askResolve = null;
+function ask({ title, text = '', input = null, ok = 'OK', danger = false }) {
+  $('#askTitle').textContent = title;
+  $('#askText').textContent = text; $('#askText').hidden = !text;
+  const field = $('#askInput');
+  field.hidden = input === null; field.label = input?.label || ''; field.value = input?.value || '';
+  $('#askOk').textContent = ok; $('#askOk').classList.toggle('danger', danger);
+  $('#askDlg').show();
+  if (input !== null) setTimeout(() => { field.focus(); field.select(); }, 50);
+  return new Promise(res => { askResolve = res; });
 }
-$('#versionSeg').onclick = e => {
-  const v = e.target.dataset.v; if (!v) return;
-  state.version = v; save(); renderVersions(); practice ? renderPractice() : renderMain();
+function finishAsk(value) { const r = askResolve; askResolve = null; $('#askDlg').close(); r?.(value); }
+$('#askOk').onclick = () => {
+  if (!$('#askInput').hidden) { const v = $('#askInput').value.trim(); if (v) finishAsk(v); } else finishAsk(true);
 };
+$('#askCancel').onclick = () => finishAsk(null);
+$('#askInput').addEventListener('keydown', e => { if (e.key === 'Enter') $('#askOk').click(); });
+$('#askDlg').addEventListener('closed', () => { if (askResolve) finishAsk(null); });
+
+// ---------- Rendering: header + drawer ----------
+function renderVersions() {
+  $('#versionSeg').innerHTML = segInner(segSet('', VERSIONS.map(v => [v, v]), state.version, true));
+}
+$('#versionSeg').addEventListener('segmented-button-set-selection', e => {
+  state.version = e.detail.button.dataset.val; save();
+  practice ? renderPractice() : renderMain();
+});
 
 function renderLists() {
   const active = activeList();
   $('#lists').innerHTML = state.lists.map(l =>
-    `<div class="list-item ${l.id === active.id ? 'on' : ''}" data-id="${l.id}">
-       <span>${esc(l.name)}</span><span class="count">${l.passages.length}</span>
-     </div>`).join('');
+    `<button class="nav-item ${l.id === active.id ? 'active' : ''}" data-id="${l.id}">
+       <md-ripple></md-ripple><md-focus-ring inward></md-focus-ring>
+       ${icon('format_list_bulleted')}<span class="label">${esc(l.name)}</span><span>${l.passages.length}</span>
+     </button>`).join('');
 }
 $('#lists').onclick = e => {
-  const el = e.target.closest('.list-item'); if (!el) return;
+  const el = e.target.closest('.nav-item'); if (!el) return;
   state.activeListId = el.dataset.id; practice = null; save(); renderAll();
 };
-function addList() {
-  const name = $('#newListName').value.trim(); if (!name) return;
+$('#addListBtn').onclick = async () => {
+  const name = await ask({ title: 'New list', input: { label: 'List name' }, ok: 'Create' });
+  if (!name) return;
   const id = uid(); state.lists.push({ id, name, passages: [] });
-  state.activeListId = id; $('#newListName').value = ''; practice = null; save(); renderAll();
-}
-$('#addListBtn').onclick = addList;
-$('#newListName').onkeydown = e => { if (e.key === 'Enter') addList(); };
+  state.activeListId = id; practice = null; save(); renderAll();
+};
 
 // ---------- Rendering: list view ----------
 function renderMain() {
@@ -238,50 +326,66 @@ function renderMain() {
   const items = list.passages.map(p => {
     const text = textFor(p, v);
     const best = p.best?.[v];
-    const badge = !text ? `<span class="badge">No ${v} text</span>`
-      : best != null ? `<span class="badge ${best >= 95 ? 'good' : ''}">Best ${best}%</span>`
-      : `<span class="badge">New</span>`;
+    const chip = !text ? `<span class="chip">No ${v} text</span>`
+      : best >= 95 ? `<span class="chip gold">${icon('workspace_premium')}Best ${best}%</span>`
+      : best != null ? `<span class="chip">Best ${best}%</span>`
+      : `<span class="chip">New</span>`;
     return `<div class="card passage" data-id="${p.id}">
       <div class="body">
-        <div class="ref">${esc(p.ref)}</div>
-        <div class="preview">${text ? esc(text) : '<i>Add ' + v + ' text to practice</i>'}</div>
+        <div class="ref-row"><span class="ref">${esc(formatRef(p.ref))}</span>${chip}</div>
+        <div class="preview">${text ? esc(text) : `<i>Add ${v} text to practice</i>`}</div>
       </div>
-      ${badge}
-      <button class="primary" data-act="practice" ${text ? '' : 'disabled'}>Practice</button>
-      <button data-act="edit">Edit</button>
-      <button class="ghost" data-act="delete" title="Delete">✕</button>
+      <md-filled-tonal-button data-act="practice" ${text ? '' : 'disabled'}>${icon('play_arrow', 'icon')}Practice</md-filled-tonal-button>
+      <md-icon-button data-act="edit" aria-label="Edit">${icon('edit')}</md-icon-button>
+      <md-icon-button data-act="delete" aria-label="Remove">${icon('delete')}</md-icon-button>
     </div>`;
   }).join('');
   $('#main').innerHTML = `
-    <div class="title-row">
-      <h3>${esc(list.name)}</h3>
-      <button class="ghost" id="renameList">Rename</button>
-      <button class="ghost" id="deleteList">Delete list</button>
-      <button id="bulkAdd">Add many</button>
-      <button class="primary" id="addPassage">+ Add passage</button>
+    <div class="page-head">
+      <h2 class="headline">${esc(list.name)}</h2>
+      <span class="anchor">
+        <md-icon-button id="listMenuBtn" aria-label="List options">${icon('more_vert')}</md-icon-button>
+        <md-menu id="listMenu" anchor="listMenuBtn" positioning="popover">
+          <md-menu-item data-act="rename-list"><div slot="headline">Rename list</div></md-menu-item>
+          <md-menu-item data-act="delete-list"><div slot="headline">Delete list</div></md-menu-item>
+        </md-menu>
+      </span>
+      <div class="spacer"></div>
+      <div class="row actions">
+        <md-filled-tonal-button id="bulkAdd">${icon('playlist_add', 'icon')}Add many</md-filled-tonal-button>
+        <md-filled-button id="addPassage">${icon('add', 'icon')}Add passage</md-filled-button>
+      </div>
     </div>
-    ${items || `<div class="empty">No passages yet. Add one to start memorizing.</div>`}`;
+    ${items || `<div class="empty">${icon('menu_book')}<p>No passages yet. Add one to start memorizing.</p>
+      <md-filled-button id="addFirst">${icon('add', 'icon')}Add passage</md-filled-button></div>`}`;
   $('#addPassage').onclick = () => openPassageDlg(null);
+  if ($('#addFirst')) $('#addFirst').onclick = () => openPassageDlg(null);
   $('#bulkAdd').onclick = openBulkDlg;
-  $('#renameList').onclick = () => {
-    const name = prompt('Rename list', list.name);
-    if (name && name.trim()) { list.name = name.trim(); save(); renderAll(); }
-  };
-  $('#deleteList').onclick = () => {
-    if (!confirm(`Delete "${list.name}" and its ${list.passages.length} passage(s)?`)) return;
+  $('#listMenuBtn').onclick = () => { $('#listMenu').open = !$('#listMenu').open; };
+}
+
+$('#main').addEventListener('click', async e => {
+  const btn = e.target.closest('[data-act]'); if (!btn || btn.hasAttribute('disabled')) return;
+  const list = activeList(), act = btn.dataset.act;
+  if (act === 'rename-list') {
+    const name = await ask({ title: 'Rename list', input: { label: 'List name', value: list.name }, ok: 'Rename' });
+    if (name) { list.name = name; save(); renderAll(); }
+    return;
+  }
+  if (act === 'delete-list') {
+    const n = list.passages.length;
+    if (!await ask({ title: `Delete "${list.name}"?`, text: `This removes the list and its ${n} passage${n === 1 ? '' : 's'}.`, ok: 'Delete', danger: true })) return;
     state.lists = state.lists.filter(l => l.id !== list.id);
     if (!state.lists.length) state.lists.push({ id: uid(), name: 'Favorites', passages: [] });
     state.activeListId = state.lists[0].id; save(); renderAll();
-  };
-}
-$('#main').addEventListener('click', e => {
-  const btn = e.target.closest('button[data-act]'); if (!btn) return;
-  const id = btn.closest('.passage').dataset.id;
-  const list = activeList(), p = list.passages.find(x => x.id === id);
-  if (btn.dataset.act === 'practice') startPractice(p);
-  if (btn.dataset.act === 'edit') openPassageDlg(p);
-  if (btn.dataset.act === 'delete' && confirm(`Remove ${p.ref}?`)) {
-    list.passages = list.passages.filter(x => x.id !== id); save(); renderAll();
+    return;
+  }
+  const card = btn.closest('.passage'); if (!card) return;
+  const p = list.passages.find(x => x.id === card.dataset.id);
+  if (act === 'practice') startPractice(p);
+  if (act === 'edit') openPassageDlg(p);
+  if (act === 'delete' && await ask({ title: `Remove ${formatRef(p.ref)}?`, ok: 'Remove', danger: true })) {
+    list.passages = list.passages.filter(x => x.id !== p.id); save(); renderAll();
   }
 });
 
@@ -295,28 +399,28 @@ function openPassageDlg(p) {
   draftVersion = state.version;
   $('#passageDlgTitle').textContent = p ? 'Edit passage' : 'Add passage';
   $('#refInput').value = p?.ref || '';
-  $('#fetchMsg').textContent = ''; $('#fetchMsg').className = 'msg';
+  setMsg('#fetchMsg', '', '');
   renderTextTabs();
-  $('#passageDlg').showModal();
-  (p ? $('#textInput') : $('#refInput')).focus();
+  $('#passageDlg').show();
+  setTimeout(() => (p ? $('#textInput') : $('#refInput')).focus(), 50);
 }
 function renderTextTabs() {
-  $('#textTabs').innerHTML = VERSIONS.map(v =>
-    `<button data-v="${v}" class="${v === draftVersion ? 'on' : ''}">${v}${draftTexts[v] ? ' ✓' : ''}</button>`).join('');
-  $('#textInput').value = draftTexts[draftVersion] || '';
-  $('#textInput').placeholder = `Paste the ${draftVersion} text for this passage`;
-  $('#fetchBtn').textContent = draftVersion === BUNDLED ? `Load ${BUNDLED} text` : `Fetch ${draftVersion} from API.Bible`;
+  $('#textTabs').innerHTML = segInner(segSet('', VERSIONS.map(v => [v, v + (textFor({ ref: $('#refInput').value, texts: draftTexts }, v) ? ' ✓' : '')]), draftVersion, true));
+  $('#textInput').value = textFor({ ref: $('#refInput').value, texts: draftTexts }, draftVersion);
+  $('#textInput').label = `${draftVersion} text`;
+  $('#textInput').placeholder = draftVersion === BUNDLED ? 'Filled in from the reference' : `Paste the ${draftVersion} text for this passage`;
+  $('#fetchLabel').textContent = draftVersion === BUNDLED ? `Load ${BUNDLED} text` : `Fetch ${draftVersion} from API.Bible`;
 }
-$('#textTabs').onclick = e => {
-  const v = e.target.dataset.v; if (!v) return;
+$('#textTabs').addEventListener('segmented-button-set-selection', e => {
   draftTexts[draftVersion] = $('#textInput').value.trim();
-  draftVersion = v; renderTextTabs();
-};
+  draftVersion = e.detail.button.dataset.val; renderTextTabs();
+});
 $('#refInput').addEventListener('change', () => {
-  if (draftVersion !== BUNDLED) return;
+  if (draftVersion !== BUNDLED) return renderTextTabs();
   try { draftTexts[BUNDLED] = bundledText($('#refInput').value); renderTextTabs(); setMsg('#fetchMsg', '', ''); }
   catch (err) { setMsg('#fetchMsg', err.message, 'err'); }
 });
+
 // ---------- Bulk add ----------
 // Expand "John 3:16, 18, 4:24" into full references, carrying the previous book/chapter forward.
 function splitRefs(input) {
@@ -335,7 +439,7 @@ function splitRefs(input) {
 }
 function openBulkDlg() {
   $('#bulkInput').value = ''; setMsg('#bulkMsg', '', '');
-  $('#bulkDlg').showModal(); $('#bulkInput').focus();
+  $('#bulkDlg').show(); setTimeout(() => $('#bulkInput').focus(), 50);
 }
 $('#bulkCancel').onclick = () => $('#bulkDlg').close();
 $('#bulkSave').onclick = () => {
@@ -495,13 +599,13 @@ const cleanText = t => t.replace(/¶/g, '').replace(/\[\d+\]/g, '').replace(/\s+
 
 // ---------- Settings ----------
 $('#settingsBtn').onclick = () => {
-  $('#apiKeyInput').value = state.apiKey; setMsg('#settingsMsg', '', ''); $('#settingsDlg').showModal();
+  $('#apiKeyInput').value = state.apiKey; setMsg('#settingsMsg', '', ''); $('#settingsDlg').show();
 };
 $('#settingsCancel').onclick = () => $('#settingsDlg').close();
 $('#settingsSave').onclick = () => {
   const key = $('#apiKeyInput').value.trim();
   if (key !== state.apiKey) state.bibleIds = {};
-  state.apiKey = key; save(); setMsg('#settingsMsg', 'Saved.', 'ok');
+  state.apiKey = key; save(); setMsg('#settingsMsg', 'API key saved.', 'ok');
 };
 $('#exportBtn').onclick = () => {
   const data = JSON.stringify({ lists: state.lists }, null, 2);
@@ -512,14 +616,15 @@ $('#exportBtn').onclick = () => {
 $('#importBtn').onclick = () => $('#importFile').click();
 $('#importFile').onchange = async e => {
   const file = e.target.files[0]; if (!file) return;
+  e.target.value = '';
   try {
     const data = JSON.parse(await file.text());
     if (!Array.isArray(data.lists)) throw new Error();
-    if (!confirm(`Import ${data.lists.length} list(s)? They'll be added alongside your current lists.`)) return;
+    const n = data.lists.length;
+    if (!await ask({ title: `Import ${n} list${n === 1 ? '' : 's'}?`, text: 'They\'ll be added alongside your current lists.', ok: 'Import' })) return;
     for (const l of data.lists) state.lists.push({ ...l, id: uid() });
     save(); renderAll(); setMsg('#settingsMsg', 'Imported.', 'ok');
   } catch { setMsg('#settingsMsg', 'That file isn\'t a valid backup.', 'err'); }
-  e.target.value = '';
 };
 
 // ---------- Practice ----------
@@ -553,14 +658,41 @@ function maskWord(w, hint, revealed = 0) {
   }).join('');
 }
 
+// Builds the practice screen once; updatePractice() refreshes the parts that change while typing.
 function renderPractice() {
   const P = practice, prefs = state.prefs;
   if (P.version !== state.version) {
     if (!textFor(P.passage, state.version)) { practice = null; return renderMain(); }
     return startPractice(P.passage);
   }
+  $('#main').innerHTML = `
+    <div class="page-head">
+      <md-icon-button id="backBtn" aria-label="Back to ${esc(activeList().name)}">${icon('arrow_back')}</md-icon-button>
+      <div>
+        <div class="eyebrow">${esc(activeList().name)} · ${P.version}</div>
+        <h2 class="headline" id="pTitle"></h2>
+      </div>
+    </div>
+    <div class="controls">
+      <div class="ctl"><span class="lbl">Type</span>${segSet('data-pref="mode"', [['letter', 'First letters'], ['word', 'Whole words']], prefs.mode)}</div>
+      <div class="ctl"><span class="lbl">Hints</span>${segSet('data-pref="hint"', [['show', 'Full text'], ['initials', 'Initials'], ['hidden', 'None']], prefs.hint)}</div>
+      <div class="ctl"><span class="lbl">Reference</span>${segSet('data-pref="ref"', [['off', 'Off'], ['start', 'Before'], ['both', 'Both']], prefs.ref)}</div>
+    </div>
+    <div class="card practice-card">
+      <div class="practice-text" id="practiceText"></div>
+      <md-linear-progress id="pBar"></md-linear-progress>
+    </div>
+    <div class="stats" id="pStats"></div>
+    <div id="pFoot"></div>`;
+  $('#backBtn').onclick = () => { practice = null; renderMain(); };
+  $('#practiceText').onclick = focusCatcher;
+  updatePractice();
+}
+
+function updatePractice() {
+  const P = practice, prefs = state.prefs;
   const done = P.i >= P.words.length;
-  const wordsHtml = P.words.map((w, k) => {
+  $('#practiceText').innerHTML = P.words.map((w, k) => {
     const st = k === P.i ? 'current' : P.status[k];
     const shown = (st === 'correct' || st === 'missed') ? esc(w) : maskWord(w, prefs.hint, k === P.i ? P.keyPos : 0);
     const typed = k === P.i && prefs.mode === 'word' && P.typed ? `<span style="opacity:.8">${esc(P.typed)}</span>` : '';
@@ -569,57 +701,39 @@ function renderPractice() {
     const brAfter = k < P.words.length - 1 && P.isRef[k] && !P.isRef[k + 1] ? '<br>' : '';
     return `${brBefore}<span class="w ${st}${P.isRef[k] ? ' ref' : ''}" data-k="${k}">${typed || shown}</span>${brAfter}`;
   }).join(' ');
-  const hideTitle = prefs.ref !== 'off' && !done;
+  $('#pTitle').innerHTML = prefs.ref !== 'off' && !done ? '<span class="muted">Reference hidden</span>' : esc(formatRef(P.passage.ref));
+  $('#pBar').value = P.i / P.words.length;
+
   const correct = P.status.filter(s => s === 'correct').length;
   const acc = P.i ? Math.round(100 * correct / P.i) : 100;
   const secs = P.start ? Math.round(((P.end || Date.now()) - P.start) / 1000) : 0;
   const best = P.passage.best?.[P.version];
+  const stat = (k, v, id = '') => `<div class="stat"><div class="k">${k}</div><div class="v"${id ? ` id="${id}"` : ''}>${v}</div></div>`;
+  $('#pStats').innerHTML = stat('Progress', `${P.i}/${P.words.length}`) + stat('Accuracy', `${acc}%`) +
+    stat('Time', `${secs}s`, 'pTime') + (best != null ? stat('Best', `${best}%`) : '');
 
-  const seg = (name, opts) => `<span><span class="lbl">${name}</span><span class="seg">${opts.map(([k, v, label]) =>
-    `<button data-pref="${k}" data-val="${v}" class="${prefs[k] === v ? 'on' : ''}">${label}</button>`).join('')}</span></span>`;
-
-  $('#main').innerHTML = `
-    <div class="title-row">
-      <button class="ghost" id="backBtn">← ${esc(activeList().name)}</button>
-      <h3>${hideTitle ? '<span class="muted">Reference hidden</span>' : esc(formatRef(P.passage.ref))} <span class="muted" style="font-size:16px">${P.version}</span></h3>
-    </div>
-    <div class="controls">
-      ${seg('Type', [['mode','letter','First letters'],['mode','word','Whole words']])}
-      ${seg('Hints', [['hint','show','Full text'],['hint','initials','Initials'],['hint','hidden','None']])}
-      ${seg('Reference', [['ref','off','Off'],['ref','start','Before'],['ref','both','Before & after']])}
-    </div>
-    <div class="card">
-      <div class="practice-text" id="practiceText" tabindex="0">${wordsHtml}</div>
-      <div class="bar"><div style="width:${100 * P.i / P.words.length}%"></div></div>
-    </div>
-    <div class="stats">
-      <span>Progress <b>${P.i}/${P.words.length}</b></span>
-      <span>Accuracy <b>${acc}%</b></span>
-      <span>Time <b>${secs}s</b></span>
-      ${best != null ? `<span>Best <b>${best}%</b></span>` : ''}
-    </div>
-    ${done ? `<div class="card done">
-        <div class="big">${acc}%</div>
-        <div class="muted">${correct} of ${P.words.length} words correct in ${secs}s${acc === 100 ? ' — perfect!' : ''}</div>
-        <div class="row" style="justify-content:center;margin-top:14px">
-          <button class="primary" id="againBtn">Practice again</button>
-          ${nextPassage() ? `<button id="nextBtn">Next passage →</button>` : ''}
-        </div>
-      </div>` : `<p class="muted" style="font-size:13px">${prefs.mode === 'letter'
-        ? 'Type the first letter of each word' + (prefs.ref !== 'off' ? ', and every digit of the chapter and verse' : '') + '. Two misses reveals the word.'
-        : 'Type each word and press space. Punctuation and capitalization don\'t matter.'} Click the passage if typing stops responding.</p>`}`;
-
-  $('#backBtn').onclick = () => { practice = null; renderMain(); };
-  document.querySelectorAll('[data-pref]').forEach(b => b.onclick = () => {
-    state.prefs[b.dataset.pref] = b.dataset.val; save();
-    if (b.dataset.pref === 'hint') renderPractice(); else startPractice(P.passage);
-  });
-  $('#practiceText').onclick = focusCatcher;
+  const nx = done && nextPassage();
+  $('#pFoot').innerHTML = done ? `<div class="card done ${acc === 100 ? 'perfect' : ''}">
+      <div class="big">${acc}%</div>
+      <div>${correct} of ${P.words.length} words correct in ${secs}s${acc === 100 ? ' — perfect!' : ''}</div>
+      <div class="row">
+        <md-filled-button id="againBtn">${icon('replay', 'icon')}Practice again</md-filled-button>
+        ${nx ? `<md-outlined-button id="nextBtn" trailing-icon>${icon('arrow_forward', 'icon')}Next passage</md-outlined-button>` : ''}
+      </div>
+    </div>` : `<p class="hint">${prefs.mode === 'letter'
+      ? 'Type the first letter of each word' + (prefs.ref !== 'off' ? ', and every digit of the chapter and verse' : '') + '. Two misses reveals the word.'
+      : 'Type each word and press space. Punctuation and capitalization don\'t matter.'} Tap the passage if typing stops responding.</p>`;
   if (done) {
     $('#againBtn').onclick = () => startPractice(P.passage);
-    const nx = nextPassage(); if (nx) $('#nextBtn').onclick = () => startPractice(nx);
+    if (nx) $('#nextBtn').onclick = () => startPractice(nx);
   } else focusCatcher();
 }
+
+$('#main').addEventListener('segmented-button-set-selection', e => {
+  const pref = e.target.dataset.pref; if (!pref || !practice) return;
+  state.prefs[pref] = e.detail.button.dataset.val; save();
+  if (pref === 'hint') updatePractice(); else startPractice(practice.passage);
+});
 
 function nextPassage() {
   const ps = activeList().passages.filter(p => textFor(p, state.version));
@@ -648,14 +762,14 @@ function shakeCurrent() {
 function handleLetter(ch) {
   const P = practice, keys = letterKeys(P, P.i);
   if (norm(ch) === keys[P.keyPos]) {
-    if (++P.keyPos < keys.length) return renderPractice();
+    if (++P.keyPos < keys.length) return updatePractice();
     P.status[P.i] = P.tries ? 'missed' : 'correct'; P.i++; P.tries = 0; P.keyPos = 0;
   } else {
     P.tries++; P.errors++;
     if (P.tries >= 2) { P.status[P.i] = 'missed'; P.i++; P.tries = 0; P.keyPos = 0; }
     else return shakeCurrent();
   }
-  finishIfDone(); renderPractice();
+  finishIfDone(); updatePractice();
 }
 
 function handleWordInput(value) {
@@ -666,7 +780,7 @@ function handleWordInput(value) {
     P.status[P.i] = norm(attempt) === norm(P.words[P.i]) ? 'correct' : 'missed';
     if (P.status[P.i] === 'missed') P.errors++;
     P.i++; P.typed = ''; $('#catcher').value = '';
-    finishIfDone(); renderPractice();
+    finishIfDone(); updatePractice();
   } else {
     P.typed = value;
     const el = document.querySelector(`.w[data-k="${P.i}"]`);
@@ -691,15 +805,18 @@ $('#catcher').addEventListener('keydown', e => {
     e.preventDefault(); handleWordInput($('#catcher').value + ' ');
   }
 });
-// Keep typing focus during practice when clicking around the page.
+// Keep typing focus during practice when a control (e.g. a segmented button) has focus.
 document.addEventListener('keydown', e => {
-  if (practice && document.activeElement === document.body && e.key.length === 1 && !e.metaKey && !e.ctrlKey) focusCatcher();
+  if (!practice || e.target === $('#catcher') || e.metaKey || e.ctrlKey || e.key.length !== 1 || e.key === ' ') return;
+  if (document.querySelector('md-dialog[open]') || e.target.closest?.('md-outlined-text-field, input, textarea')) return;
+  focusCatcher();
 });
 setInterval(() => { if (practice?.start && !practice.end) {
-  const t = document.querySelector('.stats span:nth-child(3) b');
+  const t = $('#pTime');
   if (t) t.textContent = Math.round((Date.now() - practice.start) / 1000) + 's';
 } }, 1000);
 
+fillIcons(document);
 renderAll();
 </script>
 </body>

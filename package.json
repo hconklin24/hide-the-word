@@ -1,0 +1,19 @@
+{
+  "name": "hide-the-word",
+  "version": "1.0.0",
+  "description": "Typing-based Bible memorization app",
+  "scripts": {
+    "vendor": "node tools/build-vendor.mjs",
+    "theme": "esbuild tools/gen-theme.mjs --bundle --platform=node --format=esm --log-level=warning | node --input-type=module > theme.css",
+    "build": "python3 build.py"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@material-symbols/svg-400": "^0.47.6",
+    "@material/material-color-utilities": "^0.4.0",
+    "@material/web": "^2.5.0",
+    "esbuild": "^0.28.2"
+  },
+  "private": true
+}
