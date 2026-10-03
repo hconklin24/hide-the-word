@@ -65,7 +65,12 @@
     border: 1px solid var(--md-sys-color-outline-variant); }
   .passage { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
   .passage .body { flex: 1; min-width: 0; padding-right: 8px; }
-  .passage .ref-row { display: flex; align-items: center; gap: 10px; margin-bottom: 2px; }
+  .passage .ref-row { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; margin-bottom: 2px; }
+  .passage .list-name { font: 500 12px/16px var(--md-ref-typeface-plain); color: var(--md-sys-color-on-surface-variant); }
+  .meta { font-size: 12px; color: var(--md-sys-color-on-surface-variant); }
+  .today-stats { margin: 0 4px 20px; }
+  .result-msg { margin-top: 10px; font-weight: 500; }
+  .caught-up md-icon { color: var(--md-sys-color-tertiary); }
   .passage .ref { font: 600 16px/24px var(--scripture); }
   .passage .preview { color: var(--md-sys-color-on-surface-variant); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
@@ -140,7 +145,8 @@
     .page-head .actions { flex-basis: 100%; }
     .practice-head { flex-wrap: nowrap; }
     .practice-head > div:not(.spacer) { min-width: 0; }
-    .practice-head .headline { font-size: 20px; line-height: 28px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .practice-head .headline, .practice-head .eyebrow { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .practice-head .headline { font-size: 20px; line-height: 28px; }
     .practice-head { gap: 2px; }
     .restart-label { display: none; }
     #restartBtn { --md-outlined-button-leading-space: 12px; --md-outlined-button-trailing-space: 12px;
@@ -163,6 +169,7 @@
 
 <div class="layout">
   <nav class="drawer" aria-label="Lists">
+    <div id="todayNav" style="display:contents"></div>
     <div class="drawer-label">My lists</div>
     <div id="lists" style="display:contents"></div>
     <md-text-button id="addListBtn"><md-icon slot="icon" data-icon="add"></md-icon>New list</md-text-button>
@@ -216,6 +223,8 @@
       <md-outlined-text-field id="apiKeyInput" label="API.Bible key"></md-outlined-text-field>
       <md-filled-tonal-button id="settingsSave">Save</md-filled-tonal-button>
     </div>
+    <div class="section-label">New passages per day</div>
+    <md-outlined-segmented-button-set id="newPerDaySeg" aria-label="New passages per day"></md-outlined-segmented-button-set>
     <md-divider></md-divider>
     <div class="section-label">Backup</div>
     <div class="row">
@@ -261,7 +270,7 @@
 <input id="catcher" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
 
 <script src="web.js"></script>
-<script type="module" src="vendor/material.js?v=3636137ea7"></script>
+<script type="module" src="vendor/material.js?v=cabdff843e"></script>
 <script type="module">
 const VERSIONS = ['WEB', 'NIV', 'NASB', 'NLT'];
 const BUNDLED = 'WEB'; // public domain, shipped inside the app
@@ -270,18 +279,19 @@ const STORE_KEY = 'hideTheWord.v1';
 // ---------- State ----------
 const uid = () => Math.random().toString(36).slice(2, 10);
 function defaultState() {
-  return { version: 'WEB', apiKey: '', bibleIds: {}, activeListId: null, lists: [],
-           prefs: { mode: 'letter', hint: 'initials', ref: 'off' } };
+  return { schema: 2, version: 'WEB', apiKey: '', bibleIds: {}, activeListId: null, lists: [], view: 'today',
+           newPerDay: 2, daily: null, prefs: { mode: 'letter', hint: 'auto', ref: 'off' } };
 }
-let state;
-try { state = Object.assign(defaultState(), JSON.parse(localStorage.getItem(STORE_KEY)) || {}); }
-catch { state = defaultState(); }
+let state, saved = null;
+try { saved = JSON.parse(localStorage.getItem(STORE_KEY)); } catch {}
+state = Object.assign(defaultState(), saved || {});
 if (!state.lists.length) {
   const id = uid();
   state.lists.push({ id, name: 'Favorites', passages: [] });
   state.activeListId = id;
 }
 state.prefs.ref ||= 'off';
+if (saved && (saved.schema || 1) < 2) { state.prefs.hint = 'auto'; state.schema = 2; } // hints now fade automatically
 const save = () => { try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch {} };
 // A passage's text in a version: what the user saved, or the built-in WEB looked up by reference.
 function textFor(p, v) {
@@ -290,6 +300,94 @@ function textFor(p, v) {
   return '';
 }
 const activeList = () => state.lists.find(l => l.id === state.activeListId) || state.lists[0];
+const allPassages = () => state.lists.flatMap(list => list.passages.map(p => ({ p, list })));
+const findPassage = id => allPassages().find(x => x.p.id === id) || null;
+
+// ---------- Spaced repetition ----------
+// Per passage and version: a level (hints fade as it rises), good runs at that level, a step on the review
+// interval ladder, and the next due date. Learning passages come back daily; memorized ones space out.
+const LEVELS = ['Learning', 'Familiar', 'Recalling', 'Memorized'];
+const LEVEL_HINT = ['show', 'initials', 'hidden', 'hidden'];
+const HINT_RANK = { show: 0, initials: 1, hidden: 2 };
+const HINT_NAME = { show: 'full text', initials: 'first letters', hidden: 'no hints' };
+const PASSES_TO_ADVANCE = [1, 2, 2];       // good runs to leave Learning, Familiar, Recalling
+const LADDER = [1, 3, 7, 14, 30, 60, 120]; // days between reviews once memorized
+const GOOD = 90, LAPSE = 70;              // accuracy thresholds (%)
+
+const dayStr = (d = new Date()) => d.toLocaleDateString('en-CA'); // YYYY-MM-DD, local time
+const today = () => dayStr();
+const addDays = n => { const d = new Date(); d.setDate(d.getDate() + n); return dayStr(d); };
+const daysUntil = due => Math.round((new Date(due + 'T00:00') - new Date(today() + 'T00:00')) / 864e5);
+const dueLabel = due => { const n = daysUntil(due); return n <= 0 ? 'Due today' : n === 1 ? 'Due tomorrow' : `Due in ${n} days`; };
+const srsOf = (p, v = state.version) => p.srs?.[v] || null;
+
+function daily() {
+  if (state.daily?.date !== today()) state.daily = { date: today(), newStarted: 0, reviewed: 0 };
+  return state.daily;
+}
+
+// Today's work in the current version: due reviews (most overdue first), then new passages up to the daily limit.
+function todayQueue() {
+  const v = state.version, t = today();
+  const withText = allPassages().filter(({ p }) => textFor(p, v));
+  const due = withText.filter(({ p }) => srsOf(p)?.due <= t).sort((a, b) => srsOf(a.p).due.localeCompare(srsOf(b.p).due));
+  const fresh = withText.filter(({ p }) => !srsOf(p)).slice(0, Math.max(0, state.newPerDay - daily().newStarted));
+  return { due, fresh, all: [...due, ...fresh] };
+}
+
+// Updates a passage's level and schedule after a finished run; returns a message for the results card.
+function recordRun(P, acc) {
+  const v = P.version, p = P.passage, t = today();
+  p.srs ||= {};
+  const isNew = !p.srs[v];
+  const s = p.srs[v] ||= { level: 0, passes: 0, step: 0, due: null, reps: 0, lapses: 0 };
+  if (isNew) daily().newStarted++;
+  const wasDue = isNew || s.due <= t;
+  const used = HINT_RANK[P.hint];
+  if (used < HINT_RANK[LEVEL_HINT[s.level]]) {
+    return { msg: `You used easier hints than this passage's level (${LEVELS[s.level]}), so this run doesn't count. Switch hints to Auto to make progress.` };
+  }
+  const before = s.level;
+  s.reps++; s.last = t;
+  if (acc >= GOOD && s.level < 3) {
+    if (used > s.level) { s.level = used; s.passes = 0; } // did better than required: skip ahead
+    if (++s.passes >= PASSES_TO_ADVANCE[s.level]) { s.level++; s.passes = 0; }
+  } else if (acc < LAPSE) {
+    s.lapses++; s.passes = 0;
+    if (s.level > 0) s.level--;
+  }
+  if (s.level < 3) { s.step = 0; s.due = addDays(1); }
+  else if (before < 3) { s.step = 0; s.due = addDays(LADDER[0]); }
+  else if (wasDue) {
+    if (acc >= GOOD) s.step = Math.min(s.step + 1, LADDER.length - 1);
+    s.due = addDays(LADDER[s.step]); // 70-89%: repeat the same interval
+  }
+  if (wasDue) daily().reviewed++;
+
+  const when = dueLabel(s.due).replace('Due ', '');
+  if (s.level > before) return s.level === 3
+    ? { msg: `Memorized! Next review ${when}.`, gold: true }
+    : { msg: `Level up: ${LEVELS[s.level]}. Hints fade to ${HINT_NAME[LEVEL_HINT[s.level]]}. Next practice ${when}.` };
+  if (s.level < before) return { msg: LEVEL_HINT[s.level] === LEVEL_HINT[before]
+    ? `Back to ${LEVELS[s.level]} for now. Two good runs will memorize it again. Next practice ${when}.`
+    : `Back to ${LEVELS[s.level]}. Hints return to ${HINT_NAME[LEVEL_HINT[s.level]]} to help. Next practice ${when}.` };
+  if (s.level === 3) return { msg: `Still memorized. Next review ${when}.`, gold: acc >= GOOD };
+  const need = PASSES_TO_ADVANCE[s.level] - s.passes;
+  return { msg: acc >= GOOD
+    ? `${need} more good run${need === 1 ? '' : 's'} to reach ${LEVELS[s.level + 1]}. Next practice ${when}.`
+    : `Score ${GOOD}% or more to level up. Next practice ${when}.` };
+}
+
+// Level chip plus best score and due date, for passage cards.
+function statusChips(p) {
+  const v = state.version, s = srsOf(p), best = p.best?.[v];
+  if (!textFor(p, v)) return `<span class="chip">No ${v} text</span>`;
+  const level = !s ? '<span class="chip">New</span>'
+    : s.level === 3 ? `<span class="chip gold">${icon('workspace_premium')}Memorized</span>`
+    : `<span class="chip">${LEVELS[s.level]}</span>`;
+  const meta = [best != null ? `Best ${best}%` : '', s?.due ? dueLabel(s.due) : ''].filter(Boolean).join(' · ');
+  return level + (meta ? `<span class="meta">${meta}</span>` : '');
+}
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
@@ -331,48 +429,80 @@ function renderVersions() {
 }
 $('#versionSeg').addEventListener('segmented-button-set-selection', e => {
   state.version = e.detail.button.dataset.val; save();
-  practice ? renderPractice() : renderMain();
+  renderAll();
 });
 
 function renderLists() {
-  const active = activeList();
+  const active = state.view === 'list' ? activeList() : null;
+  $('#todayNav').innerHTML = `<button class="nav-item ${state.view === 'today' ? 'active' : ''}" data-view="today">
+       <md-ripple></md-ripple><md-focus-ring inward></md-focus-ring>
+       ${icon('today')}<span class="label">Today</span><span>${todayQueue().all.length || ''}</span>
+     </button>`;
   $('#lists').innerHTML = state.lists.map(l =>
-    `<button class="nav-item ${l.id === active.id ? 'active' : ''}" data-id="${l.id}">
+    `<button class="nav-item ${l.id === active?.id ? 'active' : ''}" data-id="${l.id}">
        <md-ripple></md-ripple><md-focus-ring inward></md-focus-ring>
        ${icon('format_list_bulleted')}<span class="label">${esc(l.name)}</span><span>${l.passages.length}</span>
      </button>`).join('');
 }
 $('#lists').onclick = e => {
   const el = e.target.closest('.nav-item'); if (!el) return;
-  state.activeListId = el.dataset.id; practice = null; save(); renderAll();
+  state.activeListId = el.dataset.id; state.view = 'list'; practice = null; save(); renderAll();
+};
+$('#todayNav').onclick = e => {
+  if (!e.target.closest('.nav-item')) return;
+  state.view = 'today'; practice = null; save(); renderAll();
 };
 $('#addListBtn').onclick = async () => {
   const name = await ask({ title: 'New list', input: { label: 'List name' }, ok: 'Create' });
   if (!name) return;
   const id = uid(); state.lists.push({ id, name, passages: [] });
-  state.activeListId = id; practice = null; save(); renderAll();
+  state.activeListId = id; state.view = 'list'; practice = null; save(); renderAll();
 };
 
-// ---------- Rendering: list view ----------
-function renderMain() {
-  const list = activeList(), v = state.version;
-  const items = list.passages.map(p => {
-    const text = textFor(p, v);
-    const best = p.best?.[v];
-    const chip = !text ? `<span class="chip">No ${v} text</span>`
-      : best >= 95 ? `<span class="chip gold">${icon('workspace_premium')}Best ${best}%</span>`
-      : best != null ? `<span class="chip">Best ${best}%</span>`
-      : `<span class="chip">New</span>`;
-    return `<div class="card passage" data-id="${p.id}">
+// ---------- Rendering: list + Today views ----------
+const renderMain = () => state.view === 'today' ? renderToday() : renderList();
+
+function passageCard(p, { list = null, manage = true } = {}) {
+  const v = state.version, text = textFor(p, v);
+  return `<div class="card passage" data-id="${p.id}">
       <div class="body">
-        <div class="ref-row"><span class="ref">${esc(formatRef(p.ref))}</span>${chip}</div>
+        ${list ? `<div class="list-name">${esc(list.name)}</div>` : ''}
+        <div class="ref-row"><span class="ref">${esc(formatRef(p.ref))}</span>${statusChips(p)}</div>
         <div class="preview">${text ? esc(text) : `<i>Add ${v} text to practice</i>`}</div>
       </div>
       <md-filled-tonal-button data-act="practice" ${text ? '' : 'disabled'}>${icon('play_arrow', 'icon')}Practice</md-filled-tonal-button>
-      <md-icon-button data-act="edit" aria-label="Edit">${icon('edit')}</md-icon-button>
-      <md-icon-button data-act="delete" aria-label="Remove">${icon('delete')}</md-icon-button>
+      ${manage ? `<md-icon-button data-act="edit" aria-label="Edit">${icon('edit')}</md-icon-button>
+      <md-icon-button data-act="delete" aria-label="Remove">${icon('delete')}</md-icon-button>` : ''}
     </div>`;
-  }).join('');
+}
+
+function renderToday() {
+  const q = todayQueue(), d = daily();
+  const dateLabel = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+  const stat = (k, v) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`;
+  const anyText = allPassages().some(({ p }) => textFor(p, state.version));
+  const nextDue = allPassages().map(({ p }) => srsOf(p)?.due).filter(Boolean).sort()[0];
+  const body = q.all.length ? q.all.map(({ p, list }) => passageCard(p, { list, manage: false })).join('')
+    : !anyText ? `<div class="empty">${icon('menu_book')}<p>Add passages to a list and they'll show up here for daily practice.</p>
+        <md-filled-button id="goLists">${icon('format_list_bulleted', 'icon')}Go to my lists</md-filled-button></div>`
+    : `<div class="empty caught-up">${icon('check_circle')}<p><b>All caught up!</b><br>${nextDue ? `Next review: ${dueLabel(nextDue).replace('Due ', '')}.` : ''}
+        You can still practice anything from your lists.</p></div>`;
+  $('#main').innerHTML = `
+    <div class="page-head">
+      <div><div class="eyebrow">${dateLabel} · ${state.version}</div><h2 class="headline">Today</h2></div>
+      <div class="spacer"></div>
+      ${q.all.length ? `<md-filled-button id="startReview">${icon('play_arrow', 'icon')}Start review</md-filled-button>` : ''}
+    </div>
+    <div class="stats today-stats">${stat('Due', q.due.length)}${stat('New', q.fresh.length)}${stat('Done today', d.reviewed)}</div>
+    ${body}`;
+  if ($('#startReview')) $('#startReview').onclick = () => startPractice(q.all[0].p, reviewCtx());
+  if ($('#goLists')) $('#goLists').onclick = () => { state.view = 'list'; save(); renderAll(); };
+}
+const reviewCtx = () => ({ kind: 'review', ids: todayQueue().all.map(x => x.p.id) });
+
+function renderList() {
+  const list = activeList();
+  const items = list.passages.map(p => passageCard(p)).join('');
   $('#main').innerHTML = `
     <div class="page-head">
       <h2 class="headline">${esc(list.name)}</h2>
@@ -414,11 +544,12 @@ $('#main').addEventListener('click', async e => {
     return;
   }
   const card = btn.closest('.passage'); if (!card) return;
-  const p = list.passages.find(x => x.id === card.dataset.id);
-  if (act === 'practice') startPractice(p);
+  const found = findPassage(card.dataset.id); if (!found) return;
+  const { p } = found;
+  if (act === 'practice') startPractice(p, state.view === 'today' ? reviewCtx() : { kind: 'list', listId: found.list.id });
   if (act === 'edit') openPassageDlg(p);
   if (act === 'delete' && await ask({ title: `Remove ${formatRef(p.ref)}?`, ok: 'Remove', danger: true })) {
-    list.passages = list.passages.filter(x => x.id !== p.id); save(); renderAll();
+    found.list.passages = found.list.passages.filter(x => x.id !== p.id); save(); renderAll();
   }
 });
 
@@ -508,7 +639,10 @@ $('#passageSave').onclick = () => {
   try { if (draftTexts[BUNDLED] === bundledText(ref)) delete draftTexts[BUNDLED]; } catch {}
   for (const v of VERSIONS) if (!draftTexts[v]) delete draftTexts[v];
   if (editing) {
-    for (const v of VERSIONS) if (textFor(editing, v) !== textFor({ ref, texts: draftTexts }, v)) delete (editing.best ||= {})[v];
+    for (const v of VERSIONS) if (textFor(editing, v) !== textFor({ ref, texts: draftTexts }, v)) {
+      delete (editing.best ||= {})[v];
+      if (editing.srs) delete editing.srs[v];
+    }
     editing.ref = ref; editing.texts = draftTexts;
   } else {
     activeList().passages.push({ id: uid(), ref, texts: draftTexts, best: {} });
@@ -632,8 +766,13 @@ const cleanText = t => t.replace(/¶/g, '').replace(/\[\d+\]/g, '').replace(/\s+
 
 // ---------- Settings ----------
 $('#settingsBtn').onclick = () => {
-  $('#apiKeyInput').value = state.apiKey; setMsg('#settingsMsg', '', ''); $('#settingsDlg').show();
+  $('#apiKeyInput').value = state.apiKey; setMsg('#settingsMsg', '', '');
+  $('#newPerDaySeg').innerHTML = segInner(segSet('', [1, 2, 3, 5].map(n => [String(n), String(n)]), String(state.newPerDay)));
+  $('#settingsDlg').show();
 };
+$('#newPerDaySeg').addEventListener('segmented-button-set-selection', e => {
+  state.newPerDay = +e.detail.button.dataset.val; save(); renderAll();
+});
 $('#settingsCancel').onclick = () => $('#settingsDlg').close();
 $('#settingsSave').onclick = () => {
   const key = $('#apiKeyInput').value.trim();
@@ -662,17 +801,19 @@ $('#importFile').onchange = async e => {
 
 // ---------- Practice ----------
 // Modes: 'letter' = type the first letter of each word; 'word' = type each full word then space.
-// Hints: 'show' = full text faded; 'initials' = first letters only; 'hidden' = blanks.
+// Hints: 'auto' = by the passage's level; 'show' = full text faded; 'initials' = first letters only; 'hidden' = blanks.
 // Reference: 'off' | 'start' | 'both' — the reference is typed as part of the passage.
 let practice = null;
 const norm = w => w.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
 
-function startPractice(p) {
+// ctx says where the run was started (a list, or the Today review queue) for back/previous/next.
+function startPractice(p, ctx = practice?.ctx || { kind: 'list', listId: findPassage(p.id)?.list.id }) {
   const body = textFor(p, state.version).split(/\s+/).filter(w => norm(w));
   const ref = formatRef(p.ref).split(' '), mode = state.prefs.ref;
   const words = [...(mode !== 'off' ? ref : []), ...body, ...(mode === 'both' ? ref : [])];
   const isRef = words.map((_, k) => mode !== 'off' && (k < ref.length || (mode === 'both' && k >= ref.length + body.length)));
-  practice = { passage: p, version: state.version, words, isRef, i: 0, keyPos: 0,
+  const hint = state.prefs.hint === 'auto' ? LEVEL_HINT[srsOf(p)?.level ?? 0] : state.prefs.hint;
+  practice = { passage: p, version: state.version, ctx, hint, words, isRef, i: 0, keyPos: 0, result: null,
     status: words.map(() => 'pending'), tries: 0, errors: 0, typed: '', start: null, end: null };
   renderPractice();
 }
@@ -698,11 +839,16 @@ function renderPractice() {
     if (!textFor(P.passage, state.version)) { practice = null; return renderMain(); }
     return startPractice(P.passage);
   }
+  const review = P.ctx.kind === 'review';
+  const where = review ? `Review ${P.ctx.ids.indexOf(P.passage.id) + 1} of ${P.ctx.ids.length}`
+    : esc(state.lists.find(l => l.id === P.ctx.listId)?.name || '');
+  const s = srsOf(P.passage);
+  const hintLabel = prefs.hint === 'auto' ? `Hints · Auto: ${HINT_NAME[P.hint]}` : 'Hints';
   $('#main').innerHTML = `
     <div class="page-head practice-head">
-      <md-icon-button id="backBtn" aria-label="Back to ${esc(activeList().name)}">${icon('arrow_back')}</md-icon-button>
+      <md-icon-button id="backBtn" aria-label="Back">${icon('arrow_back')}</md-icon-button>
       <div>
-        <div class="eyebrow">${esc(activeList().name)} · ${P.version}</div>
+        <div class="eyebrow">${where} · ${P.version} · ${s ? LEVELS[s.level] : 'New'}</div>
         <h2 class="headline" id="pTitle"></h2>
       </div>
       <div class="spacer"></div>
@@ -712,7 +858,7 @@ function renderPractice() {
     </div>
     <div class="controls">
       <div class="ctl"><span class="lbl">Type</span>${segSet('data-pref="mode"', [['letter', 'First letters'], ['word', 'Whole words']], prefs.mode)}</div>
-      <div class="ctl"><span class="lbl">Hints</span>${segSet('data-pref="hint"', [['show', 'Full text'], ['initials', 'Initials'], ['hidden', 'None']], prefs.hint)}</div>
+      <div class="ctl"><span class="lbl">${hintLabel}</span>${segSet('data-pref="hint"', [['auto', 'Auto'], ['show', 'Full text'], ['initials', 'Initials'], ['hidden', 'None']], prefs.hint)}</div>
       <div class="ctl"><span class="lbl">Reference</span>${segSet('data-pref="ref"', [['off', 'Off'], ['start', 'Before'], ['both', 'Both']], prefs.ref)}</div>
     </div>
     <div class="card practice-card">
@@ -721,7 +867,7 @@ function renderPractice() {
     </div>
     <div class="stats" id="pStats"></div>
     <div id="pFoot"></div>`;
-  $('#backBtn').onclick = () => { practice = null; renderMain(); };
+  $('#backBtn').onclick = () => { if (review) state.view = 'today'; practice = null; save(); renderAll(); };
   $('#restartBtn').onclick = () => startPractice(P.passage);
   $('#prevBtn').onclick = () => { const p = adjacentPassage(-1); if (p) startPractice(p); };
   $('#skipBtn').onclick = () => { const p = adjacentPassage(1); if (p) startPractice(p); };
@@ -734,7 +880,7 @@ function updatePractice() {
   const done = P.i >= P.words.length;
   $('#practiceText').innerHTML = P.words.map((w, k) => {
     const st = k === P.i ? 'current' : P.status[k];
-    const shown = (st === 'correct' || st === 'missed') ? esc(w) : maskWord(w, prefs.hint, k === P.i ? P.keyPos : 0);
+    const shown = (st === 'correct' || st === 'missed') ? esc(w) : maskWord(w, P.hint, k === P.i ? P.keyPos : 0);
     const typed = k === P.i && prefs.mode === 'word' && P.typed ? `<span style="opacity:.8">${esc(P.typed)}</span>` : '';
     // Put the reference on its own line, apart from the passage text.
     const brBefore = k > 0 && P.isRef[k] && !P.isRef[k - 1] ? '<br>' : '';
@@ -753,13 +899,17 @@ function updatePractice() {
     stat('Time', `${secs}s`, 'pTime') + (best != null ? stat('Best', `${best}%`) : '');
 
   const pv = done && adjacentPassage(-1), nx = done && adjacentPassage(1);
-  $('#pFoot').innerHTML = done ? `<div class="card done ${acc === 100 ? 'perfect' : ''}">
+  const endOfReview = done && P.ctx.kind === 'review' && !nx;
+  $('#pFoot').innerHTML = done ? `<div class="card done ${acc === 100 || P.result?.gold ? 'perfect' : ''}">
       <div class="big">${acc}%</div>
       <div>${correct} of ${P.words.length} words correct in ${secs}s${acc === 100 ? ' — perfect!' : ''}</div>
+      ${P.result ? `<div class="result-msg">${esc(P.result.msg)}</div>` : ''}
+      ${endOfReview ? `<div class="result-msg">${todayQueue().all.length ? 'End of this review.' : 'That\'s everything for today. Well done!'}</div>` : ''}
       <div class="row">
         ${pv ? `<md-outlined-button id="prevDoneBtn">${icon('arrow_back', 'icon')}Previous passage</md-outlined-button>` : ''}
         <md-filled-button id="againBtn">${icon('replay', 'icon')}Practice again</md-filled-button>
         ${nx ? `<md-outlined-button id="nextBtn" trailing-icon>${icon('arrow_forward', 'icon')}Next passage</md-outlined-button>` : ''}
+        ${endOfReview ? `<md-filled-tonal-button id="todayBtn">${icon('today', 'icon')}Back to Today</md-filled-tonal-button>` : ''}
       </div>
     </div>` : `<p class="hint">${prefs.mode === 'letter'
       ? 'Type the first letter of each word' + (prefs.ref !== 'off' ? ', and every digit of the chapter and verse' : '') + '. Two misses reveals the word.'
@@ -768,18 +918,22 @@ function updatePractice() {
     $('#againBtn').onclick = () => startPractice(P.passage);
     if (pv) $('#prevDoneBtn').onclick = () => startPractice(pv);
     if (nx) $('#nextBtn').onclick = () => startPractice(nx);
+    if (endOfReview) $('#todayBtn').onclick = () => { state.view = 'today'; practice = null; save(); renderAll(); };
   } else focusCatcher();
 }
 
 $('#main').addEventListener('segmented-button-set-selection', e => {
   const pref = e.target.dataset.pref; if (!pref || !practice) return;
   state.prefs[pref] = e.detail.button.dataset.val; save();
-  if (pref === 'hint') updatePractice(); else startPractice(practice.passage);
+  startPractice(practice.passage);
 });
 
-// The passage before (dir = -1) or after (dir = 1) the current one, skipping any without text in this version.
+// The passage before (dir = -1) or after (dir = 1) the current one in its list or review queue,
+// skipping any without text in this version.
 function adjacentPassage(dir) {
-  const ps = activeList().passages.filter(p => textFor(p, state.version));
+  const ctx = practice.ctx;
+  const ps = (ctx.kind === 'review' ? ctx.ids.map(id => findPassage(id)?.p)
+    : state.lists.find(l => l.id === ctx.listId)?.passages || []).filter(p => p && textFor(p, state.version));
   const k = ps.findIndex(p => p.id === practice.passage.id);
   return k < 0 ? null : ps[k + dir] || null;
 }
@@ -793,7 +947,8 @@ function finishIfDone() {
   const acc = Math.round(100 * P.status.filter(s => s === 'correct').length / P.words.length);
   const best = P.passage.best ||= {};
   if (best[P.version] == null || acc > best[P.version]) best[P.version] = acc;
-  save();
+  P.result = recordRun(P, acc);
+  save(); renderLists();
 }
 
 function shakeCurrent() {
@@ -827,7 +982,7 @@ function handleWordInput(value) {
   } else {
     P.typed = value;
     const el = document.querySelector(`.w[data-k="${P.i}"]`);
-    if (el) el.innerHTML = value ? `<span style="opacity:.8">${esc(value)}</span>` : maskWord(P.words[P.i], state.prefs.hint);
+    if (el) el.innerHTML = value ? `<span style="opacity:.8">${esc(value)}</span>` : maskWord(P.words[P.i], P.hint);
   }
 }
 
@@ -863,7 +1018,8 @@ setInterval(() => { if (practice?.start && !practice.end) {
 // Safari (iOS, iPadOS, macOS) erases a site's saved data after ~7 days without a visit, unless the site is
 // installed to the Home Screen / Dock. Other desktop browsers only evict under disk pressure.
 const ua = navigator.userAgent;
-const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+// iPadOS Safari reports a Mac user agent, so a touch-capable "Mac" is an iPad.
+const isIOS = /iPad|iPhone|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
 const isMacSafari = !isIOS && /Macintosh/.test(ua) && /Safari\//.test(ua) && !/Chrome|Chromium|Edg|Firefox|OPR/.test(ua);
 const isInstalled = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 const storageAtRisk = (isIOS || isMacSafari) && !isInstalled;
