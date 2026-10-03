@@ -127,6 +127,11 @@
     main { padding: 16px 16px 40px; }
     .headline { font-size: 24px; line-height: 32px; }
     .page-head .actions { flex-basis: 100%; }
+    .practice-head { flex-wrap: nowrap; }
+    .practice-head > div:not(.spacer) { min-width: 0; }
+    .restart-label { display: none; }
+    #restartBtn { --md-outlined-button-leading-space: 12px; --md-outlined-button-trailing-space: 12px;
+      --md-outlined-button-with-leading-icon-leading-space: 12px; --md-outlined-button-with-leading-icon-trailing-space: 12px; }
     .passage { flex-wrap: wrap; }
     .passage .body { flex-basis: 100%; }
     .practice-text { font-size: 19px; padding: 16px 18px; }
@@ -666,12 +671,14 @@ function renderPractice() {
     return startPractice(P.passage);
   }
   $('#main').innerHTML = `
-    <div class="page-head">
+    <div class="page-head practice-head">
       <md-icon-button id="backBtn" aria-label="Back to ${esc(activeList().name)}">${icon('arrow_back')}</md-icon-button>
       <div>
         <div class="eyebrow">${esc(activeList().name)} · ${P.version}</div>
         <h2 class="headline" id="pTitle"></h2>
       </div>
+      <div class="spacer"></div>
+      <md-outlined-button id="restartBtn" aria-label="Restart">${icon('replay', 'icon')}<span class="restart-label">Restart</span></md-outlined-button>
     </div>
     <div class="controls">
       <div class="ctl"><span class="lbl">Type</span>${segSet('data-pref="mode"', [['letter', 'First letters'], ['word', 'Whole words']], prefs.mode)}</div>
@@ -685,6 +692,7 @@ function renderPractice() {
     <div class="stats" id="pStats"></div>
     <div id="pFoot"></div>`;
   $('#backBtn').onclick = () => { practice = null; renderMain(); };
+  $('#restartBtn').onclick = () => startPractice(P.passage);
   $('#practiceText').onclick = focusCatcher;
   updatePractice();
 }
